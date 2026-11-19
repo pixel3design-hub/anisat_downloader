@@ -1,126 +1,163 @@
-# anisat_downloader
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="Icona di AniSat Downloader">
+</p>
 
-Estensione per Brave (Chromium MV3) + servizio Rust per gestire serie, download e uscite di
-[animesaturn.net](https://www.animesaturn.net).
+<h1 align="center">anisat_downloader</h1>
 
-- **Estensione** = cervello: cerca le serie per nome, propone le stagioni trovate dai "Correlati",
-  elenca gli episodi scaricabili, gestisce la coda di download nativa di Brave, esporta la lista di
-  file per aria2/JDownloader, tiene i preferiti e lo stato di visione, genera il feed RSS.
-- **Servizio Rust** (`anisat-feed`): riceve il feed dall'estensione (`POST /feed`), lo salva in
-  `~/.anisatrss/feed.rss` e lo serve su `http://127.0.0.1:8787/feed.xml`. Così un lettore RSS ha una
-  URL stabile e il feed resta raggiungibile anche a browser chiuso. Se il servizio non risponde
-  l'estensione non salva niente: chiede se riprovare o scaricare `feed.rss`.
+<p align="center">
+  Estensione per Brave, Chrome, Chromium, Edge e Firefox, più un piccolo servizio Rust che tiene
+  aggiornato un feed RSS delle serie che segui su
+  <a href="https://www.animesaturn.net">animesaturn.net</a>.
+</p>
+
+## A cosa serve
+
+AnimeSaturn pubblica le puntate una alla volta, non ha una coda di download e non dice quando esce la
+prossima. Se segui quattro o cinque serie, finisci per aprire il sito ogni giorno, controllare cosa è
+uscito, aprire il player e salvare i file a mano.
+
+L'estensione fa quel lavoro:
+
+- tiene l'elenco delle serie che segui, con le puntate uscite e quelle previste;
+- scarica gli episodi che scegli in `Download/<cartella>/<serie>/`, usando la coda del browser, e sa
+  anche produrre un file di testo con gli URL diretti per chi preferisce aria2 o JDownloader;
+- scrive un feed RSS con le uscite e la stima della prossima puntata, così un lettore RSS ti avvisa
+  senza tenere il browser aperto.
+
+Quello che non fa: non tocca la tua cronologia o il tuo profilo sul sito, non converte i video (il
+sito serve già mp4 progressivi, niente HLS) e non nasconde che il download da un sito di terze parti
+resti un uso personale da valutare rispetto ai loro termini.
+
+## Cosa c'è nel repository
+
+| Cartella | Contenuto |
+|---|---|
+| `extension/` | l'estensione MV3 in JS puro, senza bundler |
+| `service/` | `anisat-feed`, il servizio Rust che salva e serve il feed |
+| `packaging/` | nfpm, PKGBUILD, Flatpak, AppImage, icone |
+| `tools/build.mjs` | costruisce i pacchetti per i browser |
+| `docs/PUBLISHING.md` | come caricare l'estensione sugli store |
 
 ## Browser supportati
 
-Un solo codice sorgente in `extension/`, con lo shim `lib/api.js` che usa `browser.*` su Firefox
-e `chrome.*` altrove. I pacchetti si costruiscono con `node tools/build.mjs`:
+Un solo codice sorgente, con lo shim `extension/lib/api.js` che usa `browser.*` su Firefox e
+`chrome.*` sugli altri. `node tools/build.mjs` produce cartelle e zip separati:
 
-| Browser | Pacchetto | Note |
+| Browser | Pacchetto | Differenza |
 |---|---|---|
-| Chrome, Chromium, Brave, Vivaldi, Edge, Opera | `dist/chrome/` · `anisat-extension-chrome-<ver>.zip` | MV3 con service worker |
+| Brave, Chrome, Chromium, Vivaldi, Edge, Opera | `dist/chrome/` · `anisat-extension-chrome-<ver>.zip` · `anisat-extension-brave-<ver>.zip` | MV3 con service worker |
 | Firefox 142+ | `dist/firefox/` · `anisat-extension-firefox-<ver>.zip` | MV3 con event page, id gecko, permesso DNR classico |
 
-Gli zip sono allegati a ogni release. Pubblicazione sugli store: [docs/PUBLISHING.md](docs/PUBLISHING.md).
+Il pacchetto Brave è lo stesso file del pacchetto Chrome, con il nome che Brave si aspetta quando lo
+trascini in `brave://extensions`. Gli zip sono allegati a ogni release; per la pubblicazione sugli
+store vedi [docs/PUBLISHING.md](docs/PUBLISHING.md).
 
 ## Installazione
 
 ### Estensione
 
-1. `brave://extensions` (o `chrome://extensions`, `edge://extensions`) → *Modalità sviluppatore* →
-   *Carica estensione non pacchettizzata* → seleziona `dist/chrome/` (oppure `extension/`).
-   Su Firefox: `about:debugging#/runtime/this-firefox` → *Carica componente temporaneo* →
-   `dist/firefox/manifest.json`.
-2. Apri il popup: **Cerca** → nome della serie → `+` (oppure incolla l'URL della serie).
-3. Scegli opzioni (⚙ dal menu estensioni): download in parallelo, intervallo di aggiornamento,
-   cartella dei download, server del feed.
+1. Brave: apri `brave://extensions`, attiva *Modalità sviluppatore*, premi *Carica estensione non
+   pacchettizzata* e scegli `dist/chrome/` (su Chrome è `chrome://extensions`, su Edge
+   `edge://extensions`). Su Firefox: `about:debugging#/runtime/this-firefox` → *Carica componente
+   temporaneo* → `dist/firefox/manifest.json`.
+2. Apri il popup e usa **Cerca**: scrivi il nome della serie, premi `+`, e se il sito ha più stagioni
+   scegli quale aggiungere o prendile tutte.
+3. Dalle opzioni (⚙ nel popup) imposti download in parallelo, intervallo di aggiornamento, cartella
+   dei download e indirizzo del servizio feed.
 
 ### Servizio feed
 
 ```bash
 cd service
 cargo build --release
-./target/release/anisat-feed        # tray + server, salva in ~/.anisatrss/feed.rss
-./target/release/anisat-feed --headless   # senza tray (systemd, server senza sessione grafica)
+./target/release/anisat-feed              # icona nella barra + server
+./target/release/anisat-feed --headless   # senza tray, per systemd o macchine senza sessione grafica
 ```
 
-- **Pagina di configurazione**: `http://127.0.0.1:8787/` (si apre anche dal menu dell'icona nella
-  barra dei programmi): nome del feed, indirizzo di ascolto, ogni quanti minuti ricontrollare file e
-  versione, controllo aggiornamenti su GitHub con avviso.
-- **Icona nella barra**: StatusNotifierItem via D-Bus (`ksni`, nessuna dipendenza GTK). Su Windows e
-  macOS per ora non c'è tray: il binario resta a console e la configurazione si apre dal browser.
-- **Rotte**: `GET /` configurazione · `POST /config` · `POST /feed` · `GET /feed.xml` · `GET /status`
-  · `GET /health`. Cambiare indirizzo dalla pagina riavvia l'ascolto da solo.
-- Il nome impostato sostituisce il `<title>` del canale nel feed ricevuto dall'estensione.
+Il servizio salva in `~/.anisatrss/feed.rss` e risponde su `http://127.0.0.1:8787/`:
 
-Binari precompilati: vedi [Releases](https://github.com/pixel3design-hub/anisat_downloader/releases) —
-`x86_64` e `aarch64` per Linux (`.tar.gz`, `.deb`, `.rpm`) e Windows (`.zip`); macOS `x86_64`/`aarch64`
-dipende dalla disponibilità dei runner GitHub e viene caricato a parte. AppImage e Flatpak si
-generano dal workflow manuale *packaging extra*.
+- `GET /` è la pagina di configurazione: nome del feed, indirizzo di ascolto, ogni quanti minuti
+  ricontrollare file e versione, controllo aggiornamenti su GitHub con avviso.
+- `GET /feed.xml` (o `/feed.rss`) è il feed da dare al lettore RSS.
+- `GET /status`, `GET /health` per diagnostica; `POST /feed` riceve il feed dall'estensione.
+- Il nome impostato nella pagina sostituisce il titolo del canale; cambiare indirizzo fa ripartire
+  l'ascolto senza riavviare il programma.
 
-I pacchetti `.deb`/`.rpm` installano anche `.desktop`, metainfo AppStream e icona in
-`hicolor/256x256`: dopo l'installazione `anisat-feed` compare con la sua icona nel menu applicazioni
-e nella pagina "Installati" del software center (KDE Discover, GNOME Software).
+L'icona nella barra usa StatusNotifierItem via D-Bus (`ksni`), quindi non tira dentro GTK. Su Windows
+e macOS il tray per ora non c'è: il binario resta a console e la configurazione si apre dal browser
+sull'indirizzo sopra.
 
-## Come funziona lo scraping (verificato sul sito)
+I binari precompilati sono nelle [release](https://github.com/pixel3design-hub/anisat_downloader/releases):
+Linux `x86_64`/`aarch64` come `.tar.gz`, `.deb` e `.rpm`, Windows come `.zip`. macOS dipende dalla
+disponibilità dei runner GitHub e viene caricato a parte. AppImage e Flatpak si generano a mano dal
+workflow *packaging extra*.
+
+I pacchetti `.deb` e `.rpm` installano anche `.desktop`, metainfo AppStream e l'icona in
+`hicolor/256x256`, quindi dopo l'installazione `anisat-feed` compare con la sua icona nel menu
+applicazioni e nella pagina "Installati" del software center.
+
+## Come funziona lo scraping
+
+Verificato sul sito il 19 novembre 2026:
 
 | Passo | Endpoint |
 |---|---|
 | ricerca per nome | `GET /api/search?q=<nome>` → JSON |
-| pagina serie | `/anime/<slug>` → JSON-LD `TVSeries` (`numberOfEpisodes`) + griglia `a.ep-tile` |
-| previsti / usciti | riquadro meta `Episodi` = previsti · titolo `Episodi (N)` = usciti |
-| pagina episodio | `/anime/<slug>/ep-N` o `/episode/<slug>/ep-N` → `watchPage({...})` con `episodeId` e `servers[].link` |
-| manifest | `GET https://play.saturncdn.net/embed/<id>/playlist?token=<k>&expires=<e>` **con `Referer: https://play.saturncdn.net/`** |
-| file | base64 + XOR con la chiave `<k>` → URL `.mp4` diretto |
+| pagina serie | `/anime/<slug>` → JSON-LD `TVSeries` (`numberOfEpisodes`) e griglia `a.ep-tile` |
+| previsti e usciti | riquadro meta `Episodi` = previsti, titolo `Episodi (N)` = usciti |
+| pagina episodio | `/anime/<slug>/ep-N` → `watchPage({...})` con `episodeId` e `servers[].link` |
+| manifest | `GET https://play.saturncdn.net/embed/<id>/playlist?token=<k>&expires=<e>` con `Referer: https://play.saturncdn.net/` |
+| file | base64 più XOR con la chiave `<k>` → URL `.mp4` diretto |
 
-Il video è un **mp4 progressivo** (niente HLS): il download non richiede `ffmpeg` né `yt-dlp`.
-`Referer` non è impostabile da `fetch()`: lo aggiunge la regola `declarativeNetRequest` in
-`extension/rules/stream.json`. Il token dell'URL scade dopo ~12 ore, quindi le liste esportate vanno
-rigenerate (la coda ri-risolve l'URL al momento del download).
+Due dettagli che contano se ci metti mano:
+
+- la pagina con il player è `/anime/<slug>/ep-N`. `/episode/<slug>/ep-N` è una scheda senza video, e
+  il sito la linka dappertutto: è la trappola principale dell'adapter.
+- `Referer` non si può impostare da `fetch()`. Lo aggiunge la regola `declarativeNetRequest` in
+  `extension/rules/stream.json`, che funziona sia in Chrome sia in Firefox (provato su Firefox 160
+  con `web-ext`).
+
+Il token dell'URL scade dopo circa 12 ore, quindi le liste esportate vanno rigenerate; la coda
+ri-risolve l'URL quando parte il download.
 
 ### Stagioni
 
-Il sito non etichetta le relazioni: i "Correlati" (`/related/<slug>`) mescolano prequel, sequel,
-versioni ITA, film e spin-off. Le stagioni si ricavano dal titolo (`... 2`, `... Season 2`, `(ITA)`)
-e si raggruppano per titolo normalizzato + lingua. All'aggiunta l'estensione mostra le stagioni
-trovate: si può sceglierne una o prenderle tutte, e ogni stagione resta una serie separata con i
-suoi episodi.
+Il sito non etichetta le relazioni: `/related/<slug>` mescola prequel, sequel, versioni ITA, film e
+spin-off. L'estensione ricava la stagione dal titolo (`... 2`, `... Season 2`, `... 2nd Season`) e
+raggruppa per titolo normalizzato più lingua. Numeri sopra 20 restano nel titolo, se no "Mob Psycho
+100" diventerebbe la stagione 100. Ogni stagione aggiunta resta una serie separata con i suoi episodi.
 
 ### Contenuto del feed
 
-- tutte le puntate di tutte le stagioni aggiunte (non solo le ultime);
-- se una stagione è in corso, la puntata successiva compare come `Ep N (in arrivo)` con
-  `<category>in-arrivo</category>`, senza link al video: è la riga "disabilitata", e nel popup la
-  casella e i pulsanti di quella puntata sono disattivati.
+Il feed contiene tutte le puntate di tutte le stagioni aggiunte, non solo le ultime. Se una stagione
+è in corso, la puntata successiva compare come `Ep N (in arrivo)` con `<category>in-arrivo</category>`
+e senza link al video: nel popup la casella e i pulsanti di quella riga sono disattivati.
 
 ### Tempo mancante alla prossima puntata
 
-Il sito non pubblica la data della puntata successiva, e `/rss/anime?slug=` ignora lo slug. La stima
-(etichettata `(stimato)` nel feed) usa la mediana degli intervalli osservati tra le uscite, con
-fallback settimanale; le date delle serie non ancora iniziate arrivano da `/upcoming`.
+Il sito non pubblica la data della puntata successiva, e `/rss/anime?slug=` ignora lo slug
+restituendo il feed globale. La stima, etichettata `(stimato)`, usa la mediana degli intervalli
+osservati tra le uscite con fallback a sette giorni; le date delle serie non ancora iniziate arrivano
+da `/upcoming`.
 
 ## Sviluppo
 
 ```bash
-node --test extension/tests/parse.test.mjs   # parsing + decodifica su fixture reali
-cargo test --manifest-path service/Cargo.toml
+node --test extension/tests/parse.test.mjs      # parsing, decodifica, stagioni, feed
+cargo test --manifest-path service/Cargo.toml   # configurazione, rotte HTTP, rebind
+node tools/build.mjs                            # pacchetti per i browser
+npx web-ext lint --source-dir dist/firefox      # validazione per AMO (0 errori)
 ```
-
-Layout: `extension/` (MV3, JS puro, nessun bundler), `service/` (Rust, una dipendenza: `tiny_http`),
-`packaging/` (nfpm, PKGBUILD, Flatpak, AppImage), `.github/workflows/` (release + packaging extra).
 
 ## Licenza
 
-GPL-2.0 — vedi [COPYING](COPYING).
-
-Il progetto è uno strumento personale: il sito di riferimento è di terze parti e i suoi termini
-possono vietarne il download.
+GPL-2.0, vedi [COPYING](COPYING).
 
 ## Riferimenti
 
-- Autore: Cristiano Gariboldo — <social@pixel3design.it>
+- Autore: Cristiano Gariboldo, <social@pixel3design.it>
 - Repository: <https://github.com/pixel3design-hub/anisat_downloader>
 - Segnalazioni: <https://github.com/pixel3design-hub/anisat_downloader/issues>
-- Release (binari `anisat-feed`): <https://github.com/pixel3design-hub/anisat_downloader/releases>
-- Icona: `icon.png` (sorgente 1024×1024) → `packaging/make-icons.sh` rigenera
-  `extension/icons/*.png` e `packaging/icon.png`
+- Release con binari ed estensione: <https://github.com/pixel3design-hub/anisat_downloader/releases>
+- Icona: `icon.png` (1024×1024) è il sorgente; `packaging/make-icons.sh` rigenera
+  `extension/icons/*.png`, `packaging/icon.png`, `service/assets/icon.png` e `docs/icon.png`

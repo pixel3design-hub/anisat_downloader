@@ -6,7 +6,7 @@
 // Uso: node tools/build.mjs
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,8 +56,12 @@ function zip(dir, name) {
 }
 
 const chromeZip = zip(join(dist, 'chrome'), `anisat-extension-chrome-${version}.zip`);
+// Brave installa lo stesso pacchetto di Chrome: copia con il nome esplicito
+const braveZip = join(dist, `anisat-extension-brave-${version}.zip`);
+copyFileSync(chromeZip, braveZip);
 const firefoxZip = zip(join(dist, 'firefox'), `anisat-extension-firefox-${version}.zip`);
 
 console.log(`estensione ${version}`);
-console.log(`  chrome/chromium/edge/brave/opera → ${chromeZip}`);
-console.log(`  firefox                          → ${firefoxZip}`);
+console.log(`  chrome/chromium/edge/opera         → ${chromeZip}`);
+console.log(`  brave                             → ${braveZip}`);
+console.log(`  firefox                           → ${firefoxZip}`);

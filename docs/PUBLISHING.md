@@ -14,6 +14,9 @@ node tools/build.mjs
 Gli stessi zip vengono prodotti automaticamente a ogni release GitHub (job `extension`):
 si scaricano dagli asset della release, senza ricostruire nulla.
 
+Per Brave il build produce anche `anisat-extension-brave-<ver>.zip`: è lo stesso file del pacchetto
+Chrome, rinominato, così non serve rinominarlo a mano prima di caricarlo.
+
 ## Prima di tutto: il rischio di policy
 
 L'estensione scarica video da `animesaturn.net`, un sito di streaming di terze parti. Il Chrome Web

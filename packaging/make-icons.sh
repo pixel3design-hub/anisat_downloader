@@ -13,4 +13,6 @@ done
 mkdir -p service/assets
 ffmpeg -v error -y -i icon.png -vf "scale=256:256:flags=lanczos" -frames:v 1 packaging/icon.png
 cp packaging/icon.png service/assets/icon.png
+mkdir -p docs
+cp packaging/icon.png docs/icon.png   # icona mostrata nel README
 echo "icone rigenerate da icon.png"
