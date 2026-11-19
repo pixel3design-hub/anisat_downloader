@@ -1,0 +1,50 @@
+name: macos
+
+# I runner macOS non sono disponibili su tutti i repository: workflow separato e
+# best-effort, così una release Linux/Windows non resta bloccata in coda.
+# I binari macOS vengono caricati sulla release quando il runner c'è.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "tag della release (es. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-13
+    timeout-minutes: 25
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-apple-darwin, aarch64-apple-darwin]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --manifest-path service/Cargo.toml --target ${{ matrix.target }}
+      - name: impacchetta
+        run: |
+          mkdir -p dist
+          cp "service/target/${{ matrix.target }}/release/anisat-feed" dist/
+          cp README.md COPYING dist/
+          cp packaging/icon.png dist/anisat-feed.png
+          tar -C dist -czf "anisat-feed-${{ matrix.target }}.tar.gz" .
+      - name: carica sulla release (aspetta che esista)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          for _ in $(seq 1 40); do
+            if gh release view "$TAG" >/dev/null 2>&1; then break; fi
+            sleep 15
+          done
+          gh release upload "$TAG" "anisat-feed-${{ matrix.target }}.tar.gz" --clobber

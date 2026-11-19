@@ -29,9 +29,10 @@ cargo build --release
 # http://127.0.0.1:8787/feed.xml
 ```
 
-Binari precompilati: vedi [Releases](https://github.com/pixel3design-hub/anisat_downloader/releases)
-(tar.gz Linux/macOS, zip Windows, `.deb`, `.rpm`). AppImage e Flatpak si generano dal workflow
-manuale *packaging extra*.
+Binari precompilati: vedi [Releases](https://github.com/pixel3design-hub/anisat_downloader/releases) —
+`x86_64` e `aarch64` per Linux (`.tar.gz`, `.deb`, `.rpm`) e Windows (`.zip`); macOS `x86_64`/`aarch64`
+dipende dalla disponibilità dei runner GitHub e viene caricato a parte. AppImage e Flatpak si
+generano dal workflow manuale *packaging extra*.
 
 ## Come funziona lo scraping (verificato sul sito)
 

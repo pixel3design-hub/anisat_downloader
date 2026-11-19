@@ -18,7 +18,8 @@ jobs:
       - name: test servizio
         run: cargo test --manifest-path service/Cargo.toml
 
-  build:
+  # Linux: x86_64 su runner standard, aarch64 su runner arm nativo
+  build-linux:
     needs: test
     runs-on: ${{ matrix.os }}
     strategy:
@@ -29,44 +30,60 @@ jobs:
             target: x86_64-unknown-linux-gnu
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-          - os: macos-13
-            target: x86_64-apple-darwin
-          - os: macos-14
-            target: aarch64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release --manifest-path service/Cargo.toml
-
-      - name: impacchetta (unix)
-        if: runner.os != 'Windows'
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --manifest-path service/Cargo.toml --target ${{ matrix.target }}
+      - name: impacchetta
         run: |
           mkdir -p dist
-          cp service/target/release/anisat-feed dist/
+          cp "service/target/${{ matrix.target }}/release/anisat-feed" dist/
           cp README.md COPYING dist/
           cp packaging/icon.png dist/anisat-feed.png
           tar -C dist -czf "anisat-feed-${{ matrix.target }}.tar.gz" .
-
-      - name: impacchetta (windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item service/target/release/anisat-feed.exe dist/
-          Copy-Item README.md,COPYING dist/
-          Compress-Archive -Path dist/* -DestinationPath "anisat-feed-${{ matrix.target }}.zip"
-
       - uses: actions/upload-artifact@v4
         with:
           name: anisat-feed-${{ matrix.target }}
-          path: |
-            anisat-feed-*.tar.gz
-            anisat-feed-*.zip
+          path: anisat-feed-*.tar.gz
+
+  # Windows: x86_64 nativo, aarch64 cross con i tool MSVC arm64
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            arch: amd64
+          - target: aarch64-pc-windows-msvc
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+      - run: cargo build --release --manifest-path service/Cargo.toml --target ${{ matrix.target }}
+      - name: impacchetta
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item "service/target/${{ matrix.target }}/release/anisat-feed.exe" dist/
+          Copy-Item README.md,COPYING dist/
+          Copy-Item packaging/icon.png dist/anisat-feed.png
+          Compress-Archive -Path dist/* -DestinationPath "anisat-feed-${{ matrix.target }}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anisat-feed-${{ matrix.target }}
+          path: anisat-feed-*.zip
 
   deb-rpm:
-    needs: build
+    needs: build-linux
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -107,7 +124,7 @@ jobs:
           path: dist/*
 
   release:
-    needs: [build, deb-rpm]
+    needs: [build-linux, build-windows, deb-rpm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
