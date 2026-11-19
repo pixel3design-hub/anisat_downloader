@@ -308,9 +308,10 @@ const handlers = {
   },
   cancel: async ({ id }) => {
     const st = await store();
-    const q = st.queue.find((x) => x.downloadId === id);
+    const dlId = Number(id);
+    const q = st.queue.find((x) => x.downloadId === dlId);
     if (q?.downloadId) chrome.downloads.cancel(q.downloadId);
-    st.queue = st.queue.filter((x) => x.downloadId !== id);
+    st.queue = st.queue.filter((x) => x.downloadId !== dlId);
     await put({ queue: st.queue });
   },
   clearQueue: async () => put({ queue: [] }),

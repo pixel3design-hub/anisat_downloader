@@ -177,6 +177,7 @@ document.addEventListener('click', async (ev) => {
         const ns = (st.episodes[slug] || []).filter((e) => e.n <= aired && !seen.has(e.n)).map((e) => e.n);
         if (!ns.length) return toast('Nessun episodio nuovo');
         await api('download', { slug, ns });
+        await load();
         return toast(`${ns.length} episodi in coda`);
       }
       case 'dlSelected': {
@@ -191,6 +192,7 @@ document.addEventListener('click', async (ev) => {
         return;
       case 'dlEp':
         await api('download', { slug, ns: [Number(n)] });
+        await load();
         return toast(`Ep ${n} in coda`);
       case 'seen':
         await api('seen', { slug, n: Number(n), value: btn.dataset.value === '1' });
