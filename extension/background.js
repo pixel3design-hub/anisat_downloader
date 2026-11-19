@@ -1,7 +1,7 @@
 // Service worker: unico cervello dell'estensione.
-// - refresh serie/episodi dal sito
+// - refresh serie/episodi dal sito (una o più stagioni)
 // - coda di download nativa (chrome.downloads) con URL ri-risolte al bisogno
-// - feed RSS scritto in <Download>/AniSatDownloader/feed.xml
+// - feed RSS inviato al servizio anisat-feed (POST /feed), che lo salva in ~/.anisatrss/feed.rss
 
 import * as site from './sites/animesaturn.js';
 import { buildFeed } from './lib/feed.js';
@@ -9,19 +9,16 @@ import { buildFeed } from './lib/feed.js';
 const DEFAULTS = {
   concurrency: 2,
   refreshMin: 30,
-  feedEnabled: true,
-  feedFolder: 'AniSatDownloader',
   downloadFolder: 'AnimeSaturn',
+  feedServer: 'http://127.0.0.1:8787',
 };
 
-const FEED_FILE = 'feed.xml';
-const feedDownloads = new Set();
 let lastFeedXml = null;
 
 // --- storage -------------------------------------------------------------
 
 async function store() {
-  const s = await chrome.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news']);
+  const s = await chrome.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState']);
   return {
     series: s.series || {},
     episodes: s.episodes || {},
@@ -29,6 +26,7 @@ async function store() {
     cadence: s.cadence || {},
     queue: s.queue || [],
     news: s.news || {},
+    feedState: s.feedState || { ok: null, at: null, bytes: 0 },
     settings: { ...DEFAULTS, ...(s.settings || {}) },
   };
 }
@@ -59,12 +57,15 @@ export async function refreshSeries(slug) {
   return st.series[slug];
 }
 
-async function addSeries(url) {
-  const slug = site.slugOf(url);
-  if (!slug) throw new Error('URL non riconosciuta: incolla la pagina di una serie');
-  await refreshSeries(slug);
-  await writeFeed();
-  return store();
+async function addSeries(slugs) {
+  const list = Array.isArray(slugs) ? slugs : [slugs];
+  for (const item of list) {
+    const slug = site.slugOf(item) || item;
+    if (!slug) throw new Error('URL non riconosciuta: incolla la pagina di una serie');
+    await refreshSeries(slug);
+  }
+  const push = await pushFeed({ quiet: true });
+  return { push };
 }
 
 async function removeSeries(slug) {
@@ -76,7 +77,7 @@ async function removeSeries(slug) {
   delete st.news[slug];
   st.queue = st.queue.filter((q) => q.slug !== slug);
   await put({ series: st.series, episodes: st.episodes, seen: st.seen, cadence: st.cadence, news: st.news, queue: st.queue });
-  await writeFeed();
+  await pushFeed({ quiet: true });
 }
 
 // --- polling RSS --------------------------------------------------------
@@ -122,7 +123,7 @@ async function poll() {
     }
   }
 
-  await writeFeed();
+  await pushFeed({ quiet: true });
   await updateBadge();
   return { updated };
 }
@@ -147,6 +148,7 @@ async function feedXml(st) {
       totalEps: s.totalEps || s.airedEps || 0,
       lastRelease: s.lastRelease || null,
       cadence: st.cadence[s.slug] || [],
+      episodes: st.episodes[s.slug] || [],
     }));
   if (!catalog.length) return null;
   const needsUpcoming = catalog.some((s) => !s.airedEps);
@@ -154,28 +156,55 @@ async function feedXml(st) {
   return buildFeed({ catalog, upcoming });
 }
 
-async function writeFeed(force = false) {
+// Invia il feed al servizio anisat-feed, che lo salva in ~/.anisatrss/feed.rss.
+// Niente download: se il server non c'è, l'errore ha serverDown=true e la UI chiede cosa fare.
+async function pushFeed({ quiet = false, force = false } = {}) {
   const st = await store();
-  if (!st.settings.feedEnabled) return null;
-  let xml;
-  try {
-    xml = await feedXml(st);
-  } catch {
-    return null;
-  }
-  if (!xml) return null;
-  if (!force && xml === lastFeedXml) return null;
-  lastFeedXml = xml;
+  const xml = await feedXml(st);
+  if (!xml) return { skipped: 'nessuna serie nei preferiti' };
+  if (!force && xml === lastFeedXml) return { unchanged: true };
 
-  const b64 = btoa(xml); // feed.js produce solo ASCII
-  const id = await chrome.downloads.download({
-    url: `data:application/rss+xml;base64,${b64}`,
-    filename: `${st.settings.feedFolder}/${FEED_FILE}`,
+  const base = String(st.settings.feedServer || DEFAULTS.feedServer).replace(/\/+$/, '');
+  let res;
+  try {
+    res = await fetch(`${base}/feed`, {
+      method: 'POST',
+      body: xml,
+      headers: { 'content-type': 'text/plain;charset=UTF-8' }, // niente preflight
+    });
+  } catch (e) {
+    const err = new Error(`server RSS non raggiungibile su ${base}`);
+    err.serverDown = true;
+    await put({ feedState: { ok: false, at: Date.now(), bytes: xml.length, error: err.message } });
+    if (quiet) return { serverDown: true, error: err.message, xml };
+    throw err;
+  }
+  if (!res.ok) {
+    const err = new Error(`il server ha risposto ${res.status}`);
+    err.serverDown = true;
+    await put({ feedState: { ok: false, at: Date.now(), bytes: xml.length, error: err.message } });
+    if (quiet) return { serverDown: true, error: err.message, xml };
+    throw err;
+  }
+
+  lastFeedXml = xml;
+  const info = await res.json().catch(() => ({}));
+  await put({ feedState: { ok: true, at: Date.now(), bytes: info.bytes ?? xml.length, path: info.path || '' } });
+  return { ok: true, bytes: xml.length, path: info.path || '', url: `${base}/feed.xml` };
+}
+
+// Solo su richiesta esplicita dell'utente (server assente).
+async function saveFeedFile() {
+  const st = await store();
+  const xml = await feedXml(st);
+  if (!xml) throw new Error('nessuna serie nei preferiti');
+  await chrome.downloads.download({
+    url: `data:application/rss+xml;base64,${btoa(xml)}`,
+    filename: 'feed.rss',
     conflictAction: 'overwrite',
     saveAs: false,
   });
-  feedDownloads.add(id);
-  return id;
+  return { bytes: xml.length };
 }
 
 // --- coda download ------------------------------------------------------
@@ -237,14 +266,6 @@ async function pump() {
 chrome.downloads.onChanged.addListener(async (delta) => {
   if (!delta.state) return;
 
-  if (feedDownloads.has(delta.id)) {
-    if (delta.state.current === 'complete' || delta.state.current === 'interrupted') {
-      feedDownloads.delete(delta.id);
-      chrome.downloads.erase({ id: delta.id }); // niente voce nel pannello download
-    }
-    return;
-  }
-
   const st = await store();
   const q = st.queue.find((x) => x.downloadId === delta.id);
   if (!q) return;
@@ -290,7 +311,8 @@ async function exportList(slug, ns) {
 const handlers = {
   state: async () => store(),
   search: ({ q }) => site.search(q),
-  add: ({ url }) => addSeries(url),
+  seasons: ({ url }) => site.seasons(url),
+  add: ({ slugs, url }) => addSeries(slugs || url),
   remove: ({ slug }) => removeSeries(slug),
   refresh: async ({ slug }) => {
     if (slug) return refreshSeries(slug);
@@ -328,10 +350,8 @@ const handlers = {
     await updateBadge();
   },
   exportList: ({ slug, ns }) => exportList(slug, ns),
-  writeFeed: async () => {
-    await writeFeed(true);
-    return { ok: true };
-  },
+  pushFeed: ({ force } = {}) => pushFeed({ force }),
+  saveFeed: () => saveFeedFile(),
   settings: async ({ patch }) => {
     const st = await store();
     const settings = { ...st.settings, ...patch };
@@ -349,7 +369,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   }
   Promise.resolve(fn(msg))
     .then((r) => reply({ ok: true, data: r }))
-    .catch((e) => reply({ ok: false, error: String(e?.message || e) }));
+    .catch((e) =>
+      reply({
+        ok: false,
+        error: String(e?.message || e),
+        serverDown: Boolean(e?.serverDown),
+        xml: e?.serverDown ? e.xml : undefined,
+      }),
+    );
   return true;
 });
 

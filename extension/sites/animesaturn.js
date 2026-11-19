@@ -161,6 +161,97 @@ export async function upcoming() {
   return out;
 }
 
+// --- stagioni -----------------------------------------------------------
+
+// Il sito non etichetta le relazioni (prequel/sequel) nel listato: marchi e spin-off
+// stanno nella stessa lista dei "Correlati". Quindi si raggruppa per titolo.
+// "Reincarnated as a Sword 2" / "... (ITA)" => base "reincarnated as a sword", stagione 2, ita
+export function parseTitle(raw) {
+  let t = String(raw).trim();
+  let lang = 'sub';
+  if (/\(ita\)\s*$/i.test(t)) {
+    lang = 'ita';
+    t = t.replace(/\s*\(ita\)\s*$/i, '');
+  }
+
+  let season = 1;
+  const m = /(?:season|stagione)\s*(\d{1,2})\s*$/i.exec(t);
+  const ord = /(\d{1,2})(?:st|nd|rd|th)\s+season\s*$/i.exec(t);
+  const tail = /^(.*\S)\s+(\d{1,2})$/.exec(t);
+  if (m) {
+    season = Number(m[1]);
+    t = t.slice(0, m.index).trim();
+  } else if (ord) {
+    season = Number(ord[1]);
+    t = t.slice(0, ord.index).trim();
+  } else if (tail && Number(tail[2]) >= 2 && Number(tail[2]) <= 20) {
+    // "Titolo 2" è una stagione, "Mob Psycho 100" no (numero fuori range, resta nel titolo)
+    season = Number(tail[2]);
+    t = tail[1].trim();
+  }
+
+  return { base: t.toLowerCase().replace(/\s+/g, ' '), season, lang, title: raw };
+}
+
+// Correlati di una serie (altri titoli della stessa famiglia)
+export async function related(url) {
+  const slug = slugOf(url);
+  if (!slug) throw new Error('URL serie non riconosciuta');
+  const html = await get(`${SITE}/related/${slug}`);
+  const out = [];
+  for (const m of html.matchAll(/<a href="\/anime\/([^"]+)" class="ac group">([\s\S]*?)<\/a>/g)) {
+    const title = decodeEntities(firstMatch(/ac__title">([^<]+)</, m[2]) || '').trim();
+    if (!title) continue;
+    const sub = firstMatch(/ac__sub">([^<]*)/, m[2]) || '';
+    out.push({
+      slug: m[1],
+      url: seriesUrl(m[1]),
+      title,
+      poster: firstMatch(/<img src="([^"]+)"/, m[2]) || '',
+      episodes: Number(firstMatch(/(\d+)\s*ep/, sub)) || null,
+      year: Number(firstMatch(/(\d{4})/, sub)) || null,
+    });
+  }
+  return out;
+}
+
+// Serie + correlati raggruppati in stagioni della stessa lingua.
+// [{ season, slug, title, url, poster, total, aired, status }] ordinate per stagione.
+// Con un solo titolo la lista ha un elemento (niente scelta da fare).
+export async function seasons(url) {
+  const self = await series(url);
+  const others = await related(url).catch(() => []);
+
+  const selfInfo = parseTitle(self.title);
+  const mine = { ...self, ...selfInfo };
+  const family = [mine];
+
+  for (const r of others) {
+    const info = parseTitle(r.title);
+    if (info.base !== selfInfo.base || info.lang !== selfInfo.lang) continue;
+    if (r.slug === self.slug) continue;
+    family.push({ ...r, ...info });
+  }
+
+  if (!family.length) return [];
+
+  family.sort((a, b) => a.season - b.season);
+  return family.map((f) => {
+    const listed = Array.isArray(f.episodes) ? f.episodes.length : null;
+    const total = f.totalEps ?? (typeof f.episodes === 'number' ? f.episodes : null) ?? listed;
+    return {
+      season: f.season,
+      slug: f.slug,
+      url: f.url,
+      title: f.title,
+      poster: f.poster || '',
+      total,
+      aired: listed ?? f.airedEps ?? total,
+      status: f.status || '',
+    };
+  });
+}
+
 // --- feed globale episodi ----------------------------------------------
 
 export async function episodesFeed() {

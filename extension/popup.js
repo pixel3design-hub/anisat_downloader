@@ -1,14 +1,18 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let st = { series: {}, episodes: {}, seen: {}, queue: {}, news: {}, settings: {} };
+let st = { series: {}, episodes: {}, seen: {}, queue: [], news: {}, settings: {}, feedState: {} };
 
 if (new URLSearchParams(location.search).has('tab')) document.body.classList.add('tab');
 
 async function api(type, extra = {}) {
   const r = await chrome.runtime.sendMessage({ type, ...extra });
   if (!r) throw new Error('nessuna risposta dal service worker');
-  if (!r.ok) throw new Error(r.error);
+  if (!r.ok) {
+    const err = new Error(r.error);
+    err.serverDown = r.serverDown;
+    throw err;
+  }
   return r.data;
 }
 
@@ -29,7 +33,85 @@ for (const b of document.querySelectorAll('nav button')) {
   });
 }
 
+// --- modale -------------------------------------------------------------
+
+function closeModal() {
+  $('#modal').hidden = true;
+  $('#modalBody').replaceChildren();
+  $('#modalActions').replaceChildren();
+}
+
+function openModal(title, bodyHtml, actions) {
+  $('#modalTitle').textContent = title;
+  $('#modalBody').innerHTML = bodyHtml;
+  const box = $('#modalActions');
+  box.replaceChildren();
+  for (const a of actions) {
+    const b = document.createElement('button');
+    b.textContent = a.label;
+    if (a.secondary) b.className = 'secondary';
+    b.addEventListener('click', () => a.onClick?.());
+    box.appendChild(b);
+  }
+  $('#modal').hidden = false;
+}
+
+// Chiede cosa fare quando il servizio anisat-feed non risponde.
+function askServer(error) {
+  openModal(
+    'Server RSS non raggiungibile',
+    `<p>${esc(error || 'nessuna risposta su http://127.0.0.1:8787')}</p>
+     <p class="hint">Il feed non è stato salvato. Puoi avviare il servizio e riprovare, oppure salvare
+     il file <code>feed.rss</code> e usarlo con un lettore RSS locale.</p>
+     <p class="hint">Comando: <code>anisat-feed</code></p>`,
+    [
+      {
+        label: 'Avvia il server',
+        onClick: async () => {
+          try {
+            await navigator.clipboard.writeText('anisat-feed');
+            toast('Comando copiato: avvialo, poi premi Riprova');
+          } catch {
+            toast('Avvia "anisat-feed" in un terminale, poi premi Riprova');
+          }
+          askServer(error);
+        },
+      },
+      {
+        label: 'Riprova',
+        secondary: true,
+        onClick: async () => {
+          try {
+            await api('pushFeed', { force: true });
+            closeModal();
+            toast('Feed inviato al server');
+            await load();
+          } catch (e) {
+            askServer(e.message);
+          }
+        },
+      },
+      {
+        label: 'Salva feed.rss',
+        secondary: true,
+        onClick: async () => {
+          try {
+            await api('saveFeed');
+            closeModal();
+            toast('feed.rss salvato nella cartella Download');
+          } catch (e) {
+            toast(`Errore: ${e.message}`);
+          }
+        },
+      },
+      { label: 'Annulla', secondary: true, onClick: closeModal },
+    ],
+  );
+}
+
 // --- rendering ----------------------------------------------------------
+
+const open = new Set();
 
 function seriesCard(s) {
   const news = st.news[s.slug] || 0;
@@ -57,11 +139,13 @@ function renderSeries() {
   const box = $('#seriesList');
   box.replaceChildren(...list.map(seriesCard));
   $('#emptyHint').hidden = list.length > 0;
-  // mantiene aperte le liste già espanse
   for (const slug of open) fillEps(slug);
-}
 
-const open = new Set();
+  const f = st.feedState || {};
+  const el = $('#feedState');
+  if (!f.at) el.textContent = 'Feed: mai inviato al server';
+  else el.textContent = `${f.ok ? 'Feed inviato' : 'Feed NON inviato'} · ${new Date(f.at).toLocaleString('it-IT')}${f.bytes ? ` · ${(f.bytes / 1024).toFixed(1)} KB` : ''}${f.path ? ` · ${f.path}` : ''}`;
+}
 
 function fillEps(slug) {
   const box = document.querySelector(`[data-eps="${CSS.escape(slug)}"]`);
@@ -74,14 +158,16 @@ function fillEps(slug) {
   box.hidden = !open.has(slug);
   if (box.hidden) return;
 
-  const rows = eps.map(
-    (e) => `
-      <div class="ep ${seen.has(e.n) ? 'seen' : ''}">
-        <label><input type="checkbox" data-pick="${e.n}" value="${e.n}"> <span class="n">Ep ${e.n}</span>${e.n > aired ? ' <small>(attesa)</small>' : ''}</label>
-        <button data-act="seen" data-slug="${esc(slug)}" data-n="${e.n}" data-value="${seen.has(e.n) ? 0 : 1}">${seen.has(e.n) ? '↺' : '✓'}</button>
-        <button data-act="dlEp" data-slug="${esc(slug)}" data-n="${e.n}">↓</button>
-      </div>`,
-  );
+  const rows = eps.map((e) => {
+    const pending = e.n > aired; // puntata non ancora uscita: riga disabilitata
+    return `
+      <div class="ep ${seen.has(e.n) ? 'seen' : ''} ${pending ? 'pending' : ''}">
+        <label><input type="checkbox" data-pick="${e.n}" value="${e.n}" ${pending ? 'disabled' : ''}>
+          <span class="n">Ep ${e.n}</span>${pending ? ' <small>(in arrivo)</small>' : ''}</label>
+        <button data-act="seen" data-slug="${esc(slug)}" data-n="${e.n}" data-value="${seen.has(e.n) ? 0 : 1}" ${pending ? 'disabled' : ''}>${seen.has(e.n) ? '↺' : '✓'}</button>
+        <button data-act="dlEp" data-slug="${esc(slug)}" data-n="${e.n}" ${pending || seen.has(e.n) ? '' : ''} ${pending ? 'disabled' : ''}>↓</button>
+      </div>`;
+  });
 
   box.innerHTML = `
     <div class="row">
@@ -95,7 +181,9 @@ function renderQueue() {
   const items = st.queue.map((q, i) => {
     const title = st.series[q.slug]?.title || q.slug;
     const state = q.state === 'done' ? '✓' : q.state === 'downloading' ? '…' : q.state === 'error' ? '⚠' : '·';
-    const retry = q.state === 'error' ? `<button data-act="retry" data-id="${q.downloadId ?? i}" data-slug="${esc(q.slug)}" data-n="${q.n}">Riprova</button>` : '';
+    const retry = q.state === 'error'
+      ? `<button data-act="retry" data-id="${q.downloadId ?? i}" data-slug="${esc(q.slug)}" data-n="${q.n}">Riprova</button>`
+      : '';
     const err = q.error ? `<small>${esc(q.error)}</small>` : '';
     return `<div class="q">
       <div><span class="n">${state}</span> ${esc(title)} — Ep ${q.n} ${err}</div>
@@ -113,6 +201,84 @@ function render() {
 async function load() {
   st = await api('state');
   render();
+}
+
+// --- aggiunta serie (scelta stagioni) -----------------------------------
+
+async function addFlow(url) {
+  toast('Cerco le stagioni…');
+  let seasons;
+  try {
+    seasons = await api('seasons', { url });
+  } catch (e) {
+    // niente correlati o pagina non valida: provo l'aggiunta diretta
+    seasons = null;
+  }
+
+  if (!seasons || !seasons.length) {
+    toast('Nessuna stagione trovata');
+    return;
+  }
+
+  if (seasons.length === 1) {
+    await commitAdd([seasons[0].slug]);
+    return;
+  }
+
+  const rows = seasons
+    .map(
+      (s) => `<label class="season">
+        <input type="checkbox" value="${esc(s.slug)}" checked>
+        <span><strong>Stagione ${s.season}</strong> — ${esc(s.title)}<br>
+        <small>${s.aired ?? '?'}${s.total && s.total !== s.aired ? `/${s.total}` : ''} episodi · ${esc(s.status || '')}</small></span>
+      </label>`,
+    )
+    .join('');
+
+  openModal(
+    'Quali stagioni aggiungere?',
+    `<div id="seasonList">${rows}</div>`,
+    [
+      {
+        label: 'Aggiungi selezionate',
+        onClick: async () => {
+          const slugs = [...document.querySelectorAll('#seasonList input:checked')].map((i) => i.value);
+          if (!slugs.length) return toast('Seleziona almeno una stagione');
+          closeModal();
+          await commitAdd(slugs);
+        },
+      },
+      {
+        label: 'Tutte',
+        secondary: true,
+        onClick: async () => {
+          closeModal();
+          await commitAdd(seasons.map((s) => s.slug));
+        },
+      },
+      { label: 'Annulla', secondary: true, onClick: closeModal },
+    ],
+  );
+}
+
+async function commitAdd(slugs) {
+  toast(`Aggiungo ${slugs.length > 1 ? `${slugs.length} stagioni` : 'la serie'}…`);
+  try {
+    const { push } = await api('add', { slugs });
+    await load();
+    if (push?.serverDown) {
+      askServer(push.error);
+      return;
+    }
+    toast('Serie aggiunta e feed inviato');
+  } catch (e) {
+    if (e.serverDown) {
+      await load();
+      askServer(e.message);
+      return;
+    }
+    toast(`Errore: ${e.message}`);
+  }
 }
 
 // --- ricerca ------------------------------------------------------------
@@ -141,37 +307,24 @@ $('#urlForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const url = $('#url').value.trim();
   if (!url) return;
-  await add(url);
+  await addFlow(url);
 });
-
-async function add(url) {
-  toast('Aggiungo…');
-  try {
-    await api('add', { url });
-    await load();
-    toast('Serie aggiunta');
-  } catch (e) {
-    toast(`Errore: ${e.message}`);
-  }
-}
 
 // --- azioni -------------------------------------------------------------
 
 document.addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button[data-act]');
-  if (!btn) return;
+  if (!btn || btn.disabled) return;
   const { act, slug, n, id, url } = btn.dataset;
 
   try {
     switch (act) {
-      case 'toggle': {
-        if (open.has(slug)) open.delete(slug);
-        else open.add(slug);
+      case 'toggle':
+        open.has(slug) ? open.delete(slug) : open.add(slug);
         fillEps(slug);
         return;
-      }
       case 'add':
-        await add(url);
+        await addFlow(url);
         return;
       case 'new': {
         const aired = st.series[slug]?.airedEps || 0;
@@ -190,7 +343,7 @@ document.addEventListener('click', async (ev) => {
         return toast(`${ns.length} episodi in coda`);
       }
       case 'selectAll':
-        for (const i of document.querySelectorAll(`[data-eps="${CSS.escape(slug)}"] input[data-pick]`)) i.checked = true;
+        for (const i of document.querySelectorAll(`[data-eps="${CSS.escape(slug)}"] input[data-pick]:not([disabled])`)) i.checked = true;
         return;
       case 'dlEp':
         await api('download', { slug, ns: [Number(n)] });
@@ -218,14 +371,19 @@ document.addEventListener('click', async (ev) => {
         return toast('Aggiornato');
       case 'openFeed':
         return chrome.tabs.create({ url: 'http://127.0.0.1:8787/feed.xml' });
+      case 'pushFeed':
+        try {
+          await api('pushFeed', { force: true });
+          await load();
+          return toast('Feed inviato al server');
+        } catch (e) {
+          if (e.serverDown) return askServer(e.message);
+          throw e;
+        }
       case 'options':
         return chrome.runtime.openOptionsPage();
       case 'expand':
         return chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?tab=1') });
-      case 'writeFeed':
-        await api('writeFeed');
-        await load();
-        return toast('feed.xml riscritto in Download');
       case 'retry':
         await api('retry', { slug, n: Number(n) });
         await load();

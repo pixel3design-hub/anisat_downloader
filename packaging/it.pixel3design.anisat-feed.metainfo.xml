@@ -13,8 +13,9 @@
 
   <description>
     <p>
-      Serve su HTTP il file feed.xml scritto dall'estensione AniSat Downloader per Brave,
-      così un lettore RSS ha una URL stabile sulla porta locale 8787.
+      Riceve il feed dall'estensione AniSat Downloader per Brave, lo salva in
+      ~/.anisatrss/feed.rss e lo serve sulla porta locale 8787: un lettore RSS ha così
+      una URL stabile anche a browser chiuso.
     </p>
     <ul>
       <li>Legge il feed a ogni richiesta: nessun riavvio dopo un aggiornamento.</li>
@@ -36,6 +37,6 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
-    <release version="0.1.2" date="2026-11-19"/>
+    <release version="0.2.0" date="2026-11-19"/>
   </releases>
 </component>

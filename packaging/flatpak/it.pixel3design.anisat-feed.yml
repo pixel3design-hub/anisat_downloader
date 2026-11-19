@@ -8,7 +8,7 @@ sdk: org.freedesktop.Sdk
 command: anisat-feed
 finish-args:
   - --share=network
-  - --filesystem=~/Downloads:ro
+  - --filesystem=~/.anisatrss:rw
 modules:
   - name: anisat-feed
     buildsystem: simple

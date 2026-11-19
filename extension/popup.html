@@ -24,8 +24,9 @@
         <div class="row">
           <button data-act="refreshAll">Aggiorna tutte</button>
           <button data-act="openFeed">Apri feed</button>
-          <button data-act="writeFeed">Riscrivi feed</button>
+          <button data-act="pushFeed">Invia feed</button>
         </div>
+        <p class="hint" id="feedState"></p>
         <div id="seriesList"></div>
         <p class="hint" id="emptyHint" hidden>Nessuna serie. Vai su “Cerca”.</p>
       </section>
@@ -49,6 +50,14 @@
         <div id="queueList"></div>
       </section>
     </main>
+
+    <div id="modal" hidden>
+      <div class="modal-box">
+        <h2 id="modalTitle"></h2>
+        <div id="modalBody"></div>
+        <div class="row modal-actions" id="modalActions"></div>
+      </div>
+    </div>
 
     <div id="toast" hidden></div>
     <script type="module" src="popup.js"></script>

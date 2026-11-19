@@ -1,18 +1,18 @@
 // Helper minimi di parsing: il service worker non ha DOMParser, quindi regex + JSON.
 
-const ENTITIES = {
-  '&quot;': '"',
-  '&amp;': '&',
-  '&#39;': "'",
-  '&apos;': "'",
-  '&lt;': '<',
-  '&gt;': '>',
-  '&nbsp;': ' ',
-};
+const NAMED = { quot: '"', amp: '&', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
 
 // Una sola passata: "&amp;quot;" resta "&quot;", niente doppia decodifica.
+// Gestisce anche le entità numeriche (&#039; capita nei titoli).
 export function decodeEntities(s) {
-  return String(s).replace(/&(quot|amp|#39|apos|lt|gt|nbsp);/g, (m) => ENTITIES[m]);
+  return String(s).replace(/&(#[xX][0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (m, e) => {
+    if (e[0] === '#') {
+      const hex = e[1] === 'x' || e[1] === 'X';
+      const code = parseInt(hex ? e.slice(2) : e.slice(1), hex ? 16 : 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+    }
+    return NAMED[e] ?? m;
+  });
 }
 
 export function firstMatch(re, s) {

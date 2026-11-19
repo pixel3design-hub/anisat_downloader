@@ -1,5 +1,6 @@
 // Verifica dell'unica logica non banale: parsing delle pagine reali del sito
-// (fixture registrate il 2026-11-19) e decodifica del manifest del player.
+// (fixture registrate il 2026-11-19), decodifica del manifest del player,
+// raggruppamento delle stagioni e costruzione del feed.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +12,7 @@ const read = (f) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'u
 
 const SERIES_HTML = read('series.html');
 const EPISODE_HTML = read('episode.html');
+const RELATED_HTML = read('related.html');
 const PLAYLIST = read('playlist.json');
 const SERIES_URL = 'https://www.animesaturn.net/anime/reincarnated-as-a-sword-season-2-j9hRW';
 
@@ -20,6 +22,7 @@ test.before(() => {
   globalThis.fetch = async (url) => {
     const u = String(url);
     if (u.includes('/playlist?')) return new Response(PLAYLIST, { status: 200 });
+    if (u.includes('/related/')) return new Response(RELATED_HTML, { status: 200 });
     if (/\/ep-\d+$/.test(new URL(u).pathname)) return new Response(EPISODE_HTML, { status: 200 });
     if (u.includes('/anime/')) return new Response(SERIES_HTML, { status: 200 });
     throw new Error(`URL non previsto nel test: ${u}`);
@@ -50,6 +53,32 @@ test('episodio: URL mp4 diretto dopo la decodifica XOR del manifest', async () =
   assert.ok(r.expiresAt > Date.now());
 });
 
+test('titoli: stagione e lingua', () => {
+  assert.deepEqual(
+    (({ base, season, lang }) => ({ base, season, lang }))(site.parseTitle('Reincarnated as a Sword 2')),
+    { base: 'reincarnated as a sword', season: 2, lang: 'sub' },
+  );
+  assert.deepEqual(
+    (({ base, season, lang }) => ({ base, season, lang }))(site.parseTitle('Reincarnated as a Sword (ITA)')),
+    { base: 'reincarnated as a sword', season: 1, lang: 'ita' },
+  );
+  assert.equal(site.parseTitle('X 2nd Season').season, 2);
+  assert.equal(site.parseTitle('Y Season 3').season, 3);
+  // numero alto: non è una stagione, resta nel titolo
+  assert.equal(site.parseTitle('Mob Psycho 100').season, 1);
+  assert.equal(site.parseTitle('Mob Psycho 100').base, 'mob psycho 100');
+});
+
+test('stagioni: correlati raggruppati per titolo e lingua', async () => {
+  const list = await site.seasons(SERIES_URL);
+  assert.equal(list.length, 2, 'ita e film esclusi');
+  assert.deepEqual(list.map((x) => x.season), [1, 2]);
+  assert.equal(list[0].slug, 'tensei-shitara-ken-deshita-4NA2f');
+  assert.equal(list[1].slug, 'reincarnated-as-a-sword-season-2-j9hRW');
+  assert.equal(list[1].aired, 8);
+  assert.equal(list[1].total, 12);
+});
+
 test('intervallo: mediana di una cadenza settimanale', () => {
   const week = 7 * 24 * 3600e3;
   const t = Date.parse('2026-10-12T20:00:00Z');
@@ -57,7 +86,7 @@ test('intervallo: mediana di una cadenza settimanale', () => {
   assert.equal(medianInterval([]), week);
 });
 
-test('feed: item usciti + stima prossima puntata, tutto ASCII per btoa()', () => {
+test('feed: tutte le puntate + riga "in arrivo" disabilitata, tutto ASCII', () => {
   const week = 7 * 24 * 3600e3;
   const last = Date.parse('2026-11-16T20:00:00Z');
   const xml = buildFeed({
@@ -71,16 +100,20 @@ test('feed: item usciti + stima prossima puntata, tutto ASCII per btoa()', () =>
         totalEps: 12,
         lastRelease: last,
         cadence: [last - 2 * week, last - week, last],
+        episodes: Array.from({ length: 8 }, (_, i) => ({ n: i + 1 })),
       },
     ],
   });
 
-  assert.match(xml, /Ep 9 \(stimato\)/);
-  assert.match(xml, /Prossimo episodio: \d\d\/\d\d \d\d:\d\d \((disponibile|\d+g \d+h|\d+h \d+m|\dm)\)/);
-  assert.match(xml, /8\/12/);
+  // 8 puntate uscite + 1 in arrivo
+  assert.equal((xml.match(/<item>/g) || []).length, 9);
+  assert.match(xml, /Ep 9 \(in arrivo\)/);
+  assert.match(xml, /<category>in-arrivo<\/category>/);
+  assert.match(xml, /Episodio 1 di Reincarnated as a Sword 2/);
+  assert.match(xml, /8\/12 episodi usciti/);
   assert.ok(xml.split('\n').every((l) => !/[^\x00-\x7f]/.test(l)), 'feed non ASCII');
   assert.doesNotThrow(() => btoa(xml));
-  // ordine decrescente per data: la stima (futura) sta in cima
+  // la puntata stimata (futura) sta in cima
   const titles = [...xml.matchAll(/<title>([^<]+)<\/title>/g)].map((m) => m[1]);
-  assert.equal(titles[1], 'Reincarnated as a Sword 2 &#8212; Ep 9 (stimato)');
+  assert.equal(titles[1], 'Reincarnated as a Sword 2 &#8212; Ep 9 (in arrivo)');
 });

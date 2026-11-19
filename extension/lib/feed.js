@@ -1,12 +1,15 @@
-// Costruzione del feed RSS dei preferiti: date di uscita + stima della prossima puntata.
-// Il sito non pubblica la data della puntata successiva, quindi la stima deriva dagli
-// intervalli osservati tra le uscite (mediana) oppure dal fallback settimanale.
+// Costruzione del feed RSS dei preferiti.
+// Contiene TUTTE le puntate di TUTTE le stagioni aggiunte; se una stagione è in corso
+// viene aggiunta la puntata successiva come voce "in arrivo" (senza link al video:
+// è la riga "disabilitata" del feed).
+// La data della prossima puntata non è pubblicata dal sito: è una stima basata sugli
+// intervalli osservati (mediana), con fallback settimanale.
 
 import { SITE, episodeUrl, seriesUrl } from '../sites/animesaturn.js';
 
 const WEEK = 7 * 24 * 3600e3;
 
-// Tutto ASCII: il feed viene poi passato a btoa() per il data URL.
+// Tutto ASCII: il feed viaggia come text/plain e può essere salvato con btoa().
 function esc(s) {
   return String(s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]))
     .replace(/[^\x20-\x7e]/g, (c) => `&#${c.codePointAt(0)};`);
@@ -39,32 +42,38 @@ export function fmtDate(ts) {
   return `${p(d.getDate())}/${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function item({ title, link, guid, pubDate, description, image }) {
+function item({ title, link, guid, pubDate, description, image, category }) {
   return [
     '    <item>',
     `      <title>${esc(title)}</title>`,
     `      <link>${esc(link)}</link>`,
     `      <guid isPermaLink="false">${esc(guid)}</guid>`,
     `      <pubDate>${new Date(pubDate).toUTCString()}</pubDate>`,
+    category ? `      <category>${esc(category)}</category>` : '',
     `      <description>${esc(description)}</description>`,
     image ? `      <media:thumbnail url="${esc(image)}"/>` : '',
     '    </item>',
   ].filter(Boolean).join('\n');
 }
 
-// catalog: [{ slug, title, poster, airedEps, totalEps, lastRelease, cadence:[ms] }]
+// catalog: [{ slug, title, poster, airedEps, totalEps, lastRelease, cadence:[ms], episodes:[{n}] }]
 // upcoming: { slug: ms } per le serie non ancora iniziate
 export function buildFeed({ catalog = [], upcoming = {}, now = Date.now() } = {}) {
   const items = [];
 
   for (const s of catalog) {
-    if (!s.airedEps) continue;
+    const aired = s.airedEps || 0;
+    if (!aired) continue;
     const interval = medianInterval(s.cadence);
     const last = s.lastRelease || (s.cadence && s.cadence.at(-1)) || null;
     if (!last) continue;
 
-    const aired = Math.min(s.airedEps, s.episodes?.length || s.airedEps);
-    for (let n = Math.max(1, aired - 2); n <= aired; n++) {
+    const numbers = s.episodes?.length
+      ? s.episodes.map((e) => (typeof e === 'number' ? e : e.n)).filter((n) => Number.isFinite(n))
+      : Array.from({ length: aired }, (_, i) => i + 1);
+
+    for (const n of numbers) {
+      if (n > aired) continue;
       const ts = last - (aired - n) * interval;
       items.push({
         pubDate: ts,
@@ -80,16 +89,18 @@ export function buildFeed({ catalog = [], upcoming = {}, now = Date.now() } = {}
     }
 
     if (s.totalEps > aired) {
+      const n = aired + 1;
       const nextTs = upcoming[s.slug] || last + interval;
       items.push({
         pubDate: nextTs,
         xml: item({
-          title: `${s.title} — Ep ${aired + 1} (stimato)`,
-          link: seriesUrl(s.slug),
-          guid: `${s.slug}#ep${aired + 1}`,
+          title: `${s.title} — Ep ${n} (in arrivo)`,
+          link: seriesUrl(s.slug), // niente link al video: puntata non ancora uscita
+          guid: `${s.slug}#ep${n}`,
           pubDate: nextTs,
+          category: 'in-arrivo',
           description:
-            `Prossimo episodio: ${fmtDate(nextTs)} (${fmtRemaining(nextTs - now)}). ` +
+            `Non ancora disponibile: previsto ${fmtDate(nextTs)} (${fmtRemaining(nextTs - now)}). ` +
             `Stima basata su ${s.cadence?.length > 1 ? `intervallo osservato di ${Math.round(interval / 864e5)}g` : 'cadenza settimanale'}. ` +
             `${aired}/${s.totalEps} usciti.`,
           image: s.poster,

@@ -3,12 +3,13 @@
 Estensione per Brave (Chromium MV3) + servizio Rust per gestire serie, download e uscite di
 [animesaturn.net](https://www.animesaturn.net).
 
-- **Estensione** = cervello: cerca le serie per nome, elenca gli episodi scaricabili, gestisce la
-  coda di download nativa di Brave, esporta la lista di file per aria2/JDownloader, tiene i preferiti
-  e lo stato di visione, genera `feed.xml`.
-- **Servizio Rust** (`anisat-feed`) = server statico del feed: espone `feed.xml` su
-  `http://127.0.0.1:8787/feed.xml`, così un lettore RSS ha una URL stabile e il feed resta
-  raggiungibile anche a browser chiuso.
+- **Estensione** = cervello: cerca le serie per nome, propone le stagioni trovate dai "Correlati",
+  elenca gli episodi scaricabili, gestisce la coda di download nativa di Brave, esporta la lista di
+  file per aria2/JDownloader, tiene i preferiti e lo stato di visione, genera il feed RSS.
+- **Servizio Rust** (`anisat-feed`): riceve il feed dall'estensione (`POST /feed`), lo salva in
+  `~/.anisatrss/feed.rss` e lo serve su `http://127.0.0.1:8787/feed.xml`. Così un lettore RSS ha una
+  URL stabile e il feed resta raggiungibile anche a browser chiuso. Se il servizio non risponde
+  l'estensione non salva niente: chiede se riprovare o scaricare `feed.rss`.
 
 ## Installazione
 
@@ -25,8 +26,8 @@ Estensione per Brave (Chromium MV3) + servizio Rust per gestire serie, download 
 ```bash
 cd service
 cargo build --release
-./target/release/anisat-feed --feed ~/Downloads/AniSatDownloader/feed.xml
-# http://127.0.0.1:8787/feed.xml
+./target/release/anisat-feed        # salva in ~/.anisatrss/feed.rss
+# http://127.0.0.1:8787/feed.xml · /status · /health
 ```
 
 Binari precompilati: vedi [Releases](https://github.com/pixel3design-hub/anisat_downloader/releases) —
@@ -53,6 +54,21 @@ Il video è un **mp4 progressivo** (niente HLS): il download non richiede `ffmpe
 `Referer` non è impostabile da `fetch()`: lo aggiunge la regola `declarativeNetRequest` in
 `extension/rules/stream.json`. Il token dell'URL scade dopo ~12 ore, quindi le liste esportate vanno
 rigenerate (la coda ri-risolve l'URL al momento del download).
+
+### Stagioni
+
+Il sito non etichetta le relazioni: i "Correlati" (`/related/<slug>`) mescolano prequel, sequel,
+versioni ITA, film e spin-off. Le stagioni si ricavano dal titolo (`... 2`, `... Season 2`, `(ITA)`)
+e si raggruppano per titolo normalizzato + lingua. All'aggiunta l'estensione mostra le stagioni
+trovate: si può sceglierne una o prenderle tutte, e ogni stagione resta una serie separata con i
+suoi episodi.
+
+### Contenuto del feed
+
+- tutte le puntate di tutte le stagioni aggiunte (non solo le ultime);
+- se una stagione è in corso, la puntata successiva compare come `Ep N (in arrivo)` con
+  `<category>in-arrivo</category>`, senza link al video: è la riga "disabilitata", e nel popup la
+  casella e i pulsanti di quella puntata sono disattivati.
 
 ### Tempo mancante alla prossima puntata
 

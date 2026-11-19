@@ -59,16 +59,16 @@
 
     <section>
       <h2>Feed RSS</h2>
-      <label>Scrivi feed.xml su disco <input id="feedEnabled" type="checkbox" /></label>
-      <label>Sottocartella del feed <input id="feedFolder" type="text" /></label>
+      <label>Server del feed <input id="feedServer" type="text" placeholder="http://127.0.0.1:8787" /></label>
       <label>Intervallo di aggiornamento (minuti) <input id="refreshMin" type="number" min="5" max="720" /></label>
       <div class="row">
-        <button id="checkServer" class="secondary">Verifica server feed</button>
+        <button id="checkServer" class="secondary">Verifica server</button>
         <span id="serverStatus" class="status">non verificato</span>
       </div>
       <p class="hint">
-        Il servizio serve il file su <code>http://127.0.0.1:8787/feed.xml</code>. Avvialo con:<br />
-        <code>anisat-feed --feed ~/Downloads/&lt;sottocartella-feed&gt;/feed.xml</code>
+        L'estensione invia il feed al servizio <code>anisat-feed</code>, che lo salva in
+        <code>~/.anisatrss/feed.rss</code> e lo serve su <code>/feed.xml</code>. Avvialo con
+        <code>anisat-feed</code>; se non risponde, l'estensione chiede se riprovare o salvare il file.
       </p>
     </section>
 
