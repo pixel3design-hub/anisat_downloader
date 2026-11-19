@@ -68,6 +68,18 @@ jobs:
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: ${{ matrix.arch }}
+      - name: linker MSVC arm64
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: pwsh
+        run: |
+          $candidates = @(
+            (Join-Path $env:VCToolsInstallDir 'bin\Hostx64\arm64\link.exe'),
+            (Join-Path $env:VCToolsInstallDir 'bin\Hostx86\arm64\link.exe')
+          )
+          $link = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $link) { throw "link.exe arm64 non trovato in $env:VCToolsInstallDir" }
+          Write-Host "linker: $link"
+          "CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=$link" | Out-File -FilePath $env:GITHUB_ENV -Append
       - run: cargo build --release --manifest-path service/Cargo.toml --target ${{ matrix.target }}
       - name: impacchetta
         shell: pwsh
