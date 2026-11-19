@@ -1,3 +1,4 @@
+import { api as webext } from './lib/api.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -6,7 +7,7 @@ let st = { series: {}, episodes: {}, seen: {}, queue: [], news: {}, settings: {}
 if (new URLSearchParams(location.search).has('tab')) document.body.classList.add('tab');
 
 async function api(type, extra = {}) {
-  const r = await chrome.runtime.sendMessage({ type, ...extra });
+  const r = await webext.runtime.sendMessage({ type, ...extra });
   if (!r) throw new Error('nessuna risposta dal service worker');
   if (!r.ok) {
     const err = new Error(r.error);
@@ -370,7 +371,7 @@ document.addEventListener('click', async (ev) => {
         await load();
         return toast('Aggiornato');
       case 'openFeed':
-        return chrome.tabs.create({ url: 'http://127.0.0.1:8787/feed.xml' });
+        return webext.tabs.create({ url: 'http://127.0.0.1:8787/feed.xml' });
       case 'pushFeed':
         try {
           await api('pushFeed', { force: true });
@@ -381,9 +382,9 @@ document.addEventListener('click', async (ev) => {
           throw e;
         }
       case 'options':
-        return chrome.runtime.openOptionsPage();
+        return webext.runtime.openOptionsPage();
       case 'expand':
-        return chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?tab=1') });
+        return webext.tabs.create({ url: webext.runtime.getURL('popup.html?tab=1') });
       case 'retry':
         await api('retry', { slug, n: Number(n) });
         await load();

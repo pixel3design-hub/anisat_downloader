@@ -18,6 +18,22 @@ jobs:
       - name: test servizio
         run: cargo test --manifest-path service/Cargo.toml
 
+  # pacchetti dell'estensione per Chrome/Chromium/Edge/Brave/Opera e Firefox
+  extension:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: build estensione (chrome + firefox)
+        run: node tools/build.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zips
+          path: dist/*.zip
+
   # Linux: x86_64 su runner standard, aarch64 su runner arm nativo
   build-linux:
     needs: test
@@ -138,7 +154,7 @@ jobs:
           path: dist/*
 
   release:
-    needs: [build-linux, build-windows, deb-rpm]
+    needs: [build-linux, build-windows, deb-rpm, extension]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

@@ -1,8 +1,9 @@
 // Service worker: unico cervello dell'estensione.
 // - refresh serie/episodi dal sito (una o più stagioni)
-// - coda di download nativa (chrome.downloads) con URL ri-risolte al bisogno
+// - coda di download nativa (downloads API) con URL ri-risolte al bisogno
 // - feed RSS inviato al servizio anisat-feed (POST /feed), che lo salva in ~/.anisatrss/feed.rss
 
+import { api as webext } from './lib/api.js';
 import * as site from './sites/animesaturn.js';
 import { buildFeed } from './lib/feed.js';
 
@@ -18,7 +19,7 @@ let lastFeedXml = null;
 // --- storage -------------------------------------------------------------
 
 async function store() {
-  const s = await chrome.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState']);
+  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState']);
   return {
     series: s.series || {},
     episodes: s.episodes || {},
@@ -31,7 +32,7 @@ async function store() {
   };
 }
 
-const put = (patch) => chrome.storage.local.set(patch);
+const put = (patch) => webext.storage.local.set(patch);
 
 // --- serie --------------------------------------------------------------
 
@@ -131,8 +132,8 @@ async function poll() {
 async function updateBadge() {
   const st = await store();
   const n = Object.values(st.news).reduce((a, b) => a + (b || 0), 0);
-  await chrome.action.setBadgeText({ text: n ? String(n) : '' });
-  await chrome.action.setBadgeBackgroundColor({ color: '#7c3aed' });
+  await webext.action.setBadgeText({ text: n ? String(n) : '' });
+  await webext.action.setBadgeBackgroundColor({ color: '#7c3aed' });
 }
 
 // --- feed ---------------------------------------------------------------
@@ -198,7 +199,7 @@ async function saveFeedFile() {
   const st = await store();
   const xml = await feedXml(st);
   if (!xml) throw new Error('nessuna serie nei preferiti');
-  await chrome.downloads.download({
+  await webext.downloads.download({
     url: `data:application/rss+xml;base64,${btoa(xml)}`,
     filename: 'feed.rss',
     conflictAction: 'overwrite',
@@ -249,7 +250,7 @@ async function pump() {
       if (!r.url) throw new Error('sorgente HLS non supportata');
       q.url = r.url;
       q.expiresAt = r.expiresAt;
-      q.downloadId = await chrome.downloads.download({
+      q.downloadId = await webext.downloads.download({
         url: r.url,
         filename: fileName(st.series[q.slug], q.n, st.settings.downloadFolder),
         conflictAction: 'uniquify',
@@ -263,7 +264,7 @@ async function pump() {
   }
 }
 
-chrome.downloads.onChanged.addListener(async (delta) => {
+webext.downloads.onChanged.addListener(async (delta) => {
   if (!delta.state) return;
 
   const st = await store();
@@ -297,7 +298,7 @@ async function exportList(slug, ns) {
   if (!lines.length) throw new Error('nessun URL risolto');
   const text = lines.join('\n') + '\n';
   const name = `${st.settings.downloadFolder || DEFAULTS.downloadFolder}/${safeName(series?.title || slug)}-list.txt`;
-  await chrome.downloads.download({
+  await webext.downloads.download({
     url: `data:text/plain;base64,${btoa(text)}`,
     filename: name,
     conflictAction: 'uniquify',
@@ -335,7 +336,7 @@ const handlers = {
     const st = await store();
     const dlId = Number(id);
     const q = st.queue.find((x) => x.downloadId === dlId);
-    if (q?.downloadId) chrome.downloads.cancel(q.downloadId);
+    if (q?.downloadId) webext.downloads.cancel(q.downloadId);
     st.queue = st.queue.filter((x) => x.downloadId !== dlId);
     await put({ queue: st.queue });
   },
@@ -356,12 +357,12 @@ const handlers = {
     const st = await store();
     const settings = { ...st.settings, ...patch };
     await put({ settings });
-    await chrome.alarms.create('poll', { periodInMinutes: settings.refreshMin });
+    await webext.alarms.create('poll', { periodInMinutes: settings.refreshMin });
     return settings;
   },
 };
 
-chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+webext.runtime.onMessage.addListener((msg, _sender, reply) => {
   const fn = handlers[msg?.type];
   if (!fn) {
     reply({ error: `comando sconosciuto: ${msg?.type}` });
@@ -384,14 +385,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
 
 async function boot() {
   const st = await store();
-  await chrome.alarms.create('poll', { periodInMinutes: st.settings.refreshMin });
+  await webext.alarms.create('poll', { periodInMinutes: st.settings.refreshMin });
   await updateBadge();
   await pump(); // coda rimasta in sospeso dopo un riavvio del service worker
 }
 
-chrome.runtime.onInstalled.addListener(boot);
-chrome.runtime.onStartup.addListener(boot);
+webext.runtime.onInstalled.addListener(boot);
+webext.runtime.onStartup.addListener(boot);
 
-chrome.alarms.onAlarm.addListener((a) => {
+webext.alarms.onAlarm.addListener((a) => {
   if (a.name === 'poll') poll();
 });

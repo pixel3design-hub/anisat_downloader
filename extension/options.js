@@ -1,7 +1,8 @@
+import { api as webext } from './lib/api.js';
 const $ = (id) => document.getElementById(id);
 
 async function api(type, extra = {}) {
-  const r = await chrome.runtime.sendMessage({ type, ...extra });
+  const r = await webext.runtime.sendMessage({ type, ...extra });
   if (!r?.ok) throw new Error(r?.error || 'errore');
   return r.data;
 }

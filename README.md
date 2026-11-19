@@ -11,12 +11,26 @@ Estensione per Brave (Chromium MV3) + servizio Rust per gestire serie, download 
   URL stabile e il feed resta raggiungibile anche a browser chiuso. Se il servizio non risponde
   l'estensione non salva niente: chiede se riprovare o scaricare `feed.rss`.
 
+## Browser supportati
+
+Un solo codice sorgente in `extension/`, con lo shim `lib/api.js` che usa `browser.*` su Firefox
+e `chrome.*` altrove. I pacchetti si costruiscono con `node tools/build.mjs`:
+
+| Browser | Pacchetto | Note |
+|---|---|---|
+| Chrome, Chromium, Brave, Vivaldi, Edge, Opera | `dist/chrome/` · `anisat-extension-chrome-<ver>.zip` | MV3 con service worker |
+| Firefox 142+ | `dist/firefox/` · `anisat-extension-firefox-<ver>.zip` | MV3 con event page, id gecko, permesso DNR classico |
+
+Gli zip sono allegati a ogni release. Pubblicazione sugli store: [docs/PUBLISHING.md](docs/PUBLISHING.md).
+
 ## Installazione
 
 ### Estensione
 
-1. `brave://extensions` → attiva *Modalità sviluppatore* → *Carica estensione non pacchettizzata* →
-   seleziona `extension/`.
+1. `brave://extensions` (o `chrome://extensions`, `edge://extensions`) → *Modalità sviluppatore* →
+   *Carica estensione non pacchettizzata* → seleziona `dist/chrome/` (oppure `extension/`).
+   Su Firefox: `about:debugging#/runtime/this-firefox` → *Carica componente temporaneo* →
+   `dist/firefox/manifest.json`.
 2. Apri il popup: **Cerca** → nome della serie → `+` (oppure incolla l'URL della serie).
 3. Scegli opzioni (⚙ dal menu estensioni): download in parallelo, intervallo di aggiornamento,
    cartella dei download, server del feed.
