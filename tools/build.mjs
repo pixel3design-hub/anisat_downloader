@@ -23,7 +23,7 @@ function copyTree(dest) {
   cpSync(src, dest, {
     recursive: true,
     // tests e fixture non servono nei pacchetti
-    filter: (p) => !p.includes(`${join('extension', 'tests')}`),
+    filter: (p) => !p.includes(`${join('extension', 'tests')}`) && !p.includes('_metadata'),
   });
 }
 

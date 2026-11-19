@@ -24,3 +24,6 @@ node_modules/
 
 # build locale pacchetti
 pkg/
+
+# cache generata da Firefox quando installa l'estensione
+_metadata/
