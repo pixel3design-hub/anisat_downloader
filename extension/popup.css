@@ -156,6 +156,9 @@ form { display: flex; gap: 6px; margin-bottom: 10px; }
 
 /* --- modale ----------------------------------------------------------- */
 
+/* l'attributo hidden deve vincere sempre sui display degli altri selettori */
+[hidden] { display: none !important; }
+
 #modal {
   position: fixed;
   inset: 0;
