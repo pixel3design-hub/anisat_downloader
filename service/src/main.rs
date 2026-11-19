@@ -10,6 +10,11 @@ use tiny_http::{Header, Response, Server, StatusCode};
 
 const BIND_DEFAULT: &str = "127.0.0.1:8787";
 
+// Riferimenti di sviluppo (da Cargo.toml, che a sua volta li prende dal repo GitHub)
+const REPO: &str = env!("CARGO_PKG_REPOSITORY");
+const AUTHOR: &str = env!("CARGO_PKG_AUTHORS");
+const LICENSE: &str = env!("CARGO_PKG_LICENSE");
+
 fn default_feed_path() -> PathBuf {
     let home = env::var_os("HOME")
         .or_else(|| env::var_os("USERPROFILE"))
@@ -38,7 +43,7 @@ fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Args, String> {
                 process::exit(0);
             }
             "-V" | "--version" => {
-                println!("anisat-feed {}", env!("CARGO_PKG_VERSION"));
+                println!("anisat-feed {} ({})", env!("CARGO_PKG_VERSION"), REPO);
                 process::exit(0);
             }
             other => return Err(format!("argomento sconosciuto: {other}")),
@@ -56,10 +61,17 @@ fn print_help() {
          --feed <percorso>   file feed.xml (default: {})\n    \
          --bind <indirizzo>  indirizzo di ascolto (default: {})\n    \
          -h, --help          questo aiuto\n    \
-         -V, --version       versione\n",
+         -V, --version       versione\n\n\
+         REPOSITORIO:\n    {}\n    segnalazioni: {}/issues\n\n\
+         AUTORE:\n    {}\n\n\
+         LICENZA:\n    {} — testo completo in COPYING\n",
         env!("CARGO_PKG_VERSION"),
         default_feed_path().display(),
         BIND_DEFAULT,
+        REPO,
+        REPO,
+        AUTHOR,
+        LICENSE,
     );
 }
 
@@ -111,10 +123,11 @@ fn main() {
     };
 
     println!(
-        "anisat-feed {} — http://{}/feed.xml\nfile: {}",
+        "anisat-feed {} — http://{}/feed.xml\nfile: {}\nrepo: {}",
         env!("CARGO_PKG_VERSION"),
         args.bind,
-        args.feed.display()
+        args.feed.display(),
+        REPO
     );
 
     for request in server.incoming_requests() {

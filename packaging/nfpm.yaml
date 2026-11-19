@@ -16,5 +16,7 @@ contents:
     dst: /usr/bin/anisat-feed
     file_info:
       mode: 0755
+  - src: ./packaging/icon.png
+    dst: /usr/share/icons/hicolor/256x256/apps/anisat-feed.png
   - src: ./COPYING
     dst: /usr/share/licenses/anisat-feed/COPYING

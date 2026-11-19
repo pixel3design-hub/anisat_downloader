@@ -3,6 +3,8 @@
   "name": "AniSat Downloader",
   "version": "0.1.0",
   "description": "Serie, episodi scaricabili, preferiti e feed RSS per animesaturn.net",
+  "author": { "email": "social@pixel3design.it" },
+  "homepage_url": "https://github.com/pixel3design-hub/anisat_downloader",
   "permissions": ["storage", "downloads", "alarms", "declarativeNetRequestWithHostAccess"],
   "host_permissions": ["*://*.animesaturn.net/*", "*://play.saturncdn.net/*", "http://127.0.0.1:8787/*"],
   "background": { "service_worker": "background.js", "type": "module" },

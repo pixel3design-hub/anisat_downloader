@@ -1,11 +1,14 @@
 [package]
 name = "anisat-feed"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Server locale del feed RSS generato dall'estensione AniSat Downloader"
 license = "GPL-2.0-only"
 repository = "https://github.com/pixel3design-hub/anisat_downloader"
+documentation = "https://github.com/pixel3design-hub/anisat_downloader#readme"
 authors = ["Cristiano Gariboldo <social@pixel3design.it>"]
+keywords = ["rss", "feed", "anime", "localhost", "downloader"]
+categories = ["command-line-utilities", "web-programming::http-server"]
 
 [dependencies]
 tiny_http = "0.12"

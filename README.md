@@ -72,3 +72,12 @@ GPL-2.0 — vedi [COPYING](COPYING).
 
 Il progetto è uno strumento personale: il sito di riferimento è di terze parti e i suoi termini
 possono vietarne il download.
+
+## Riferimenti
+
+- Autore: Cristiano Gariboldo — <social@pixel3design.it>
+- Repository: <https://github.com/pixel3design-hub/anisat_downloader>
+- Segnalazioni: <https://github.com/pixel3design-hub/anisat_downloader/issues>
+- Release (binari `anisat-feed`): <https://github.com/pixel3design-hub/anisat_downloader/releases>
+- Icona: `icon.png` (sorgente 1024×1024) → `packaging/make-icons.sh` rigenera
+  `extension/icons/*.png` e `packaging/icon.png`
