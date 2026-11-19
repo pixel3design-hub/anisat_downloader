@@ -21,13 +21,6 @@ pub struct AniTray {
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-fn open_url(url: &str) {
-    // xdg-open è lo standard freedesktop; se manca, proviamo gio
-    if std::process::Command::new("xdg-open").arg(url).spawn().is_err() {
-        let _ = std::process::Command::new("gio").arg("open").arg(url).spawn();
-    }
-}
-
 fn page_url(bind: &str) -> String {
     let host = bind.replace("0.0.0.0", "127.0.0.1").replace("[::]", "127.0.0.1");
     format!("http://{host}/")
@@ -72,13 +65,13 @@ impl ksni::Tray for AniTray {
         vec![
             StandardItem {
                 label: "Apri configurazione".into(),
-                activate: Box::new({ let b = bind.clone(); move |_| open_url(&page_url(&b)) }),
+                activate: Box::new({ let b = bind.clone(); move |_| crate::open_url(&page_url(&b)) }),
                 ..Default::default()
             }
             .into(),
             StandardItem {
                 label: "Apri il feed".into(),
-                activate: Box::new({ let b = bind.clone(); move |_| open_url(&format!("{}feed.xml", page_url(&b))) }),
+                activate: Box::new({ let b = bind.clone(); move |_| crate::open_url(&format!("{}feed.xml", page_url(&b))) }),
                 ..Default::default()
             }
             .into(),

@@ -356,6 +356,23 @@ fn handle(app: &App, method: &str, url: &str, body: Option<&str>) -> (u16, &'sta
     }
 }
 
+fn open_url(url: &str) {
+    #[cfg(target_os = "linux")]
+    {
+        if std::process::Command::new("xdg-open").arg(url).spawn().is_err() {
+            let _ = std::process::Command::new("gio").arg("open").arg(url).spawn();
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+}
+
 fn header(name: &str, value: &str) -> Header {
     Header::from_bytes(name.as_bytes(), value.as_bytes()).expect("header valido")
 }
@@ -373,6 +390,7 @@ fn main() {
     };
 
     let dir = args.data_dir.unwrap_or_else(default_data_dir);
+    let headless = args.headless;
     let mut cfg = config::Config::load(&dir);
     if let Some(bind) = args.bind.clone() {
         cfg.apply(&format!("{{\"bind\":\"{}\"}}", config::escape(&bind)));
@@ -402,7 +420,12 @@ fn main() {
             Ok(s) => Arc::new(s),
             Err(e) => {
                 eprintln!("impossibile ascoltare su {bind}: {e}");
-                process::exit(1);
+                if headless {
+                    process::exit(1);
+                }
+                // probabilmente un'altra istanza è già attiva: apro la sua pagina
+                open_url(&format!("http://{bind}/"));
+                process::exit(0);
             }
         };
         sync_tray(&app);
