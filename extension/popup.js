@@ -3,6 +3,8 @@ const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>
 
 let st = { series: {}, episodes: {}, seen: {}, queue: {}, news: {}, settings: {} };
 
+if (new URLSearchParams(location.search).has('tab')) document.body.classList.add('tab');
+
 async function api(type, extra = {}) {
   const r = await chrome.runtime.sendMessage({ type, ...extra });
   if (!r) throw new Error('nessuna risposta dal service worker');
@@ -216,6 +218,10 @@ document.addEventListener('click', async (ev) => {
         return toast('Aggiornato');
       case 'openFeed':
         return chrome.tabs.create({ url: 'http://127.0.0.1:8787/feed.xml' });
+      case 'options':
+        return chrome.runtime.openOptionsPage();
+      case 'expand':
+        return chrome.tabs.create({ url: chrome.runtime.getURL('popup.html?tab=1') });
       case 'writeFeed':
         await api('writeFeed');
         await load();

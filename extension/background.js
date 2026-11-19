@@ -11,6 +11,7 @@ const DEFAULTS = {
   refreshMin: 30,
   feedEnabled: true,
   feedFolder: 'AniSatDownloader',
+  downloadFolder: 'AnimeSaturn',
 };
 
 const FEED_FILE = 'feed.xml';
@@ -183,9 +184,11 @@ function safeName(s) {
   return String(s).replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim() || 'serie';
 }
 
-function fileName(series, n) {
+function fileName(series, n, folder = DEFAULTS.downloadFolder) {
   const base = safeName(series?.title || series?.slug || 'serie');
-  return `${base}/${base} - Ep ${String(n).padStart(2, '0')}.mp4`;
+  const prefix = safeName(folder).replace(/^\/+|\/+$/g, '');
+  const path = `${base}/${base} - Ep ${String(n).padStart(2, '0')}.mp4`;
+  return prefix ? `${prefix}/${path}` : path;
 }
 
 async function enqueue(slug, ns) {
@@ -219,7 +222,7 @@ async function pump() {
       q.expiresAt = r.expiresAt;
       q.downloadId = await chrome.downloads.download({
         url: r.url,
-        filename: fileName(st.series[q.slug], q.n),
+        filename: fileName(st.series[q.slug], q.n, st.settings.downloadFolder),
         conflictAction: 'uniquify',
         saveAs: false,
       });
@@ -265,14 +268,14 @@ async function exportList(slug, ns) {
     try {
       const r = await site.resolveStream(ep.url);
       if (!r.url) continue;
-      lines.push(`${r.url}\n  out=${fileName(series, ep.n)}`);
+      lines.push(`${r.url}\n  out=${fileName(series, ep.n, st.settings.downloadFolder)}`);
     } catch {
       lines.push(`# ep ${ep.n}: URL non risolvibile (${ep.url})`);
     }
   }
   if (!lines.length) throw new Error('nessun URL risolto');
   const text = lines.join('\n') + '\n';
-  const name = `AniSatDownloader/${safeName(series?.title || slug)}-list.txt`;
+  const name = `${st.settings.downloadFolder || DEFAULTS.downloadFolder}/${safeName(series?.title || slug)}-list.txt`;
   await chrome.downloads.download({
     url: `data:text/plain;base64,${btoa(text)}`,
     filename: name,
