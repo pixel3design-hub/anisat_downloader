@@ -20,6 +20,7 @@
     <ul>
       <li>Legge il feed a ogni richiesta: nessun riavvio dopo un aggiornamento.</li>
       <li>Funziona anche a browser chiuso, servendo l'ultimo feed generato.</li>
+      <li>Icona nella barra dei programmi e pagina di configurazione (nome, indirizzo, controllo aggiornamenti).</li>
       <li>Ascolta solo su 127.0.0.1 per default.</li>
     </ul>
   </description>
@@ -37,6 +38,6 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
-    <release version="0.2.0" date="2026-11-19"/>
+    <release version="0.3.0" date="2026-11-19"/>
   </releases>
 </component>

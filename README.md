@@ -19,16 +19,25 @@ Estensione per Brave (Chromium MV3) + servizio Rust per gestire serie, download 
    seleziona `extension/`.
 2. Apri il popup: **Cerca** → nome della serie → `+` (oppure incolla l'URL della serie).
 3. Scegli opzioni (⚙ dal menu estensioni): download in parallelo, intervallo di aggiornamento,
-   sottocartella del feed.
+   cartella dei download, server del feed.
 
 ### Servizio feed
 
 ```bash
 cd service
 cargo build --release
-./target/release/anisat-feed        # salva in ~/.anisatrss/feed.rss
-# http://127.0.0.1:8787/feed.xml · /status · /health
+./target/release/anisat-feed        # tray + server, salva in ~/.anisatrss/feed.rss
+./target/release/anisat-feed --headless   # senza tray (systemd, server senza sessione grafica)
 ```
+
+- **Pagina di configurazione**: `http://127.0.0.1:8787/` (si apre anche dal menu dell'icona nella
+  barra dei programmi): nome del feed, indirizzo di ascolto, ogni quanti minuti ricontrollare file e
+  versione, controllo aggiornamenti su GitHub con avviso.
+- **Icona nella barra**: StatusNotifierItem via D-Bus (`ksni`, nessuna dipendenza GTK). Su Windows e
+  macOS per ora non c'è tray: il binario resta a console e la configurazione si apre dal browser.
+- **Rotte**: `GET /` configurazione · `POST /config` · `POST /feed` · `GET /feed.xml` · `GET /status`
+  · `GET /health`. Cambiare indirizzo dalla pagina riavvia l'ascolto da solo.
+- Il nome impostato sostituisce il `<title>` del canale nel feed ricevuto dall'estensione.
 
 Binari precompilati: vedi [Releases](https://github.com/pixel3design-hub/anisat_downloader/releases) —
 `x86_64` e `aarch64` per Linux (`.tar.gz`, `.deb`, `.rpm`) e Windows (`.zip`); macOS `x86_64`/`aarch64`

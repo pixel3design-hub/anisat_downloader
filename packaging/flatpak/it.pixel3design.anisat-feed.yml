@@ -9,6 +9,7 @@ command: anisat-feed
 finish-args:
   - --share=network
   - --filesystem=~/.anisatrss:rw
+  - --talk-name=org.kde.StatusNotifierWatcher
 modules:
   - name: anisat-feed
     buildsystem: simple

@@ -1,6 +1,6 @@
 [package]
 name = "anisat-feed"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Server locale del feed RSS generato dall'estensione AniSat Downloader"
 license = "GPL-2.0-only"
@@ -12,8 +12,13 @@ categories = ["command-line-utilities", "web-programming::http-server"]
 
 [dependencies]
 tiny_http = "0.12"
+ureq = "3"
 
 [profile.release]
 strip = true
 lto = true
 opt-level = "z"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = { version = "0.3.7", default-features = false, features = ["blocking", "async-io"] }
+png = "0.18"

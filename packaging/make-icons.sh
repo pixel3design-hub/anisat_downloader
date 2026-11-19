@@ -10,5 +10,7 @@ for size in 16 32 48 128; do
   ffmpeg -v error -y -i icon.png -vf "scale=${size}:${size}:flags=lanczos" -frames:v 1 \
     "extension/icons/icon${size}.png"
 done
+mkdir -p service/assets
 ffmpeg -v error -y -i icon.png -vf "scale=256:256:flags=lanczos" -frames:v 1 packaging/icon.png
+cp packaging/icon.png service/assets/icon.png
 echo "icone rigenerate da icon.png"

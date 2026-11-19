@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AniSat Feed — configurazione</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff; --panel: #f4f5f8; --line: #dce0e8; --ink: #1b1f27;
+        --mute: #5b6472; --brand: #6d28d9; --ok: #15803d; --bad: #b91c1c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #0f1115; --panel: #171a21; --line: #262b36; --ink: #e7e9ee; --mute: #98a0b3; --brand: #7c3aed; --ok: #4ade80; --bad: #f87171; }
+      }
+      * { box-sizing: border-box; }
+      body {
+        max-width: 620px; margin: 32px auto; padding: 0 18px 40px;
+        background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif;
+      }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      .sub { color: var(--mute); margin: 0 0 20px; font-size: 13px; }
+      section { margin: 0 0 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+      h2 { font-size: 13px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--mute); }
+      label { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+      label:last-of-type { border-bottom: 0; }
+      input:not([type="checkbox"]) {
+        width: 260px; padding: 6px 9px; font: inherit; color: inherit;
+        background: var(--bg); border: 1px solid var(--line); border-radius: 7px;
+      }
+      input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand); }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      button {
+        padding: 7px 14px; border: 0; border-radius: 7px; cursor: pointer;
+        background: var(--brand); color: #fff; font: inherit;
+      }
+      button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+      button:disabled { opacity: .55; cursor: default; }
+      dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 13px; }
+      dt { color: var(--mute); }
+      dd { margin: 0; word-break: break-all; }
+      code { padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+      .ok { color: var(--ok); }
+      .bad { color: var(--bad); }
+      a { color: var(--brand); }
+      #notice { display: none; margin: 0 0 16px; padding: 10px 14px; border: 1px solid var(--brand); border-radius: 10px; }
+      #notice.show { display: block; }
+      .hint { color: var(--mute); font-size: 13px; margin: 8px 0 0; }
+    </style>
+  </head>
+  <body>
+    <h1>AniSat Feed</h1>
+    <p class="sub">Server locale del feed RSS dell'estensione AniSat Downloader.</p>
+
+    <div id="notice"></div>
+
+    <section>
+      <h2>Configurazione</h2>
+      <form id="cfg">
+        <label>Nome del feed <input id="name" type="text" maxlength="120" /></label>
+        <label>Indirizzo di ascolto <input id="bind" type="text" placeholder="127.0.0.1:8787" /></label>
+        <label>Controlli ogni (minuti) <input id="check_min" type="number" min="5" max="1440" /></label>
+        <label>Controlla aggiornamenti su GitHub <input id="version_check" type="checkbox" /></label>
+        <div class="row" style="margin-top: 14px">
+          <button type="submit">Salva</button>
+          <span id="saveResult" class="hint"></span>
+        </div>
+      </form>
+      <p class="hint">
+        Cambiare l'indirizzo riavvia l'ascolto: se il server non risponde più, riapri questa pagina
+        sul nuovo indirizzo.
+      </p>
+    </section>
+
+    <section>
+      <h2>Stato</h2>
+      <dl>
+        <dt>Feed</dt><dd id="s-path">—</dd>
+        <dt>Contenuto</dt><dd id="s-feed">—</dd>
+        <dt>Ultimo salvataggio</dt><dd id="s-updated">—</dd>
+        <dt>Versione</dt><dd id="s-version">—</dd>
+        <dt>Controllo versione</dt><dd id="s-check">—</dd>
+      </dl>
+      <div class="row" style="margin-top: 14px">
+        <button id="refresh" class="secondary" type="button">Aggiorna stato</button>
+        <a id="feedLink" href="feed.xml" target="_blank" rel="noreferrer">Apri il feed</a>
+      </div>
+    </section>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      function fmtTime(ts) {
+        if (!ts) return '—';
+        return new Date(ts * 1000).toLocaleString('it-IT');
+      }
+
+      function showNotice(data) {
+        const n = $('notice');
+        if (data.update_available && data.latest) {
+          n.className = 'show';
+          n.innerHTML =
+            'Aggiornamento disponibile: <strong>' + data.latest + '</strong> (hai ' + data.version + '). ' +
+            '<a href="' + data.releases_url + '" target="_blank" rel="noreferrer">Scarica la nuova versione</a>';
+        } else {
+          n.className = '';
+        }
+      }
+
+      async function loadConfig() {
+        const r = await fetch('config', { cache: 'no-store' });
+        const c = await r.json();
+        $('name').value = c.name;
+        $('bind').value = c.bind;
+        $('check_min').value = c.check_min;
+        $('version_check').checked = c.version_check;
+      }
+
+      async function loadStatus() {
+        const r = await fetch('status', { cache: 'no-store' });
+        const s = await r.json();
+        $('s-path').textContent = s.path;
+        $('s-feed').textContent = s.items + ' item · ' + (s.bytes / 1024).toFixed(1) + ' KB';
+        $('s-updated').textContent = fmtTime(s.updated_at);
+        $('s-version').textContent = s.version + (s.update_available ? ' → ' + s.latest + ' disponibile' : ' (aggiornata)');
+        $('s-check').textContent = s.version_check
+          ? (s.checked_at ? 'ultimo controllo ' + fmtTime(s.checked_at) : 'in attesa')
+          : 'disattivato';
+        if (s.version_check_error) $('s-check').textContent += ' · ' + s.version_check_error;
+        const cls = s.update_available ? 'bad' : 'ok';
+        $('s-version').className = cls;
+        showNotice(s);
+      }
+
+      $('cfg').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const body = JSON.stringify({
+          name: $('name').value,
+          bind: $('bind').value,
+          check_min: Number($('check_min').value),
+          version_check: $('version_check').checked,
+        });
+        $('saveResult').textContent = 'salvo…';
+        try {
+          const r = await fetch('config', { method: 'POST', headers: { 'content-type': 'text/plain' }, body });
+          const res = await r.json();
+          $('saveResult').textContent = res.restarted
+            ? 'salvato · ascolto riavviato su ' + res.bind
+            : 'salvato ✓';
+          await loadStatus();
+        } catch (e) {
+          $('saveResult').textContent = 'errore: ' + e.message;
+        }
+        setTimeout(() => ($('saveResult').textContent = ''), 4000);
+      });
+
+      $('refresh').addEventListener('click', loadStatus);
+
+      loadConfig().then(loadStatus).catch((e) => {
+        $('notice').className = 'show';
+        $('notice').textContent = 'Errore: ' + e.message;
+      });
+      setInterval(loadStatus, 30000);
+    </script>
+  </body>
+</html>
