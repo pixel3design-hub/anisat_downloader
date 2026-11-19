@@ -2,7 +2,7 @@
   <img src="docs/icon.png" width="128" alt="Icona di AniSat Downloader">
 </p>
 
-<h1 align="center">anisat_downloader</h1>
+<h1 align="center">AniSat Downloader</h1>
 
 <p align="center">
   Estensione per Brave, Chrome, Chromium, Edge e Firefox, più un piccolo servizio Rust che tiene
