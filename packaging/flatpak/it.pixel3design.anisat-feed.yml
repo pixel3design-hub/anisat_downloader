@@ -1,0 +1,22 @@
+# Flatpak del servizio feed. Il binario arriva dall'archivio della release GitHub,
+# quindi @@VERSION@@ e @@SHA256@@ vanno sostituiti prima della build
+# (lo fa .github/workflows/packaging.yml, oppure a mano).
+app-id: it.pixel3design.anisat-feed
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: anisat-feed
+finish-args:
+  - --share=network
+  - --filesystem=~/Downloads:ro
+modules:
+  - name: anisat-feed
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 anisat-feed /app/bin/anisat-feed
+      - install -Dm644 anisat-feed.png /app/share/icons/hicolor/256x256/apps/it.pixel3design.anisat-feed.png
+      - install -Dm644 COPYING /app/share/licenses/it.pixel3design.anisat-feed/COPYING
+    sources:
+      - type: archive
+        url: https://github.com/pixel3design-hub/anisat_downloader/releases/download/v@@VERSION@@/anisat-feed-x86_64-unknown-linux-gnu.tar.gz
+        sha256: @@SHA256@@

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>AniSat Downloader</title>
+  </head>
+  <body>
+    <header>
+      <h1>AniSat</h1>
+      <nav>
+        <button data-tab="series" class="on">Serie</button>
+        <button data-tab="search">Cerca</button>
+        <button data-tab="queue">Coda</button>
+      </nav>
+    </header>
+
+    <main>
+      <section data-panel="series">
+        <div class="row">
+          <button data-act="refreshAll">Aggiorna tutte</button>
+          <button data-act="openFeed">Apri feed</button>
+          <button data-act="writeFeed">Riscrivi feed</button>
+        </div>
+        <div id="seriesList"></div>
+        <p class="hint" id="emptyHint" hidden>Nessuna serie. Vai su “Cerca”.</p>
+      </section>
+
+      <section data-panel="search" hidden>
+        <form id="searchForm">
+          <input id="q" placeholder="Nome della serie…" autofocus />
+          <button>Cerca</button>
+        </form>
+        <div id="results"></div>
+        <form id="urlForm">
+          <input id="url" placeholder="…oppure incolla l'URL della serie" />
+          <button>Aggiungi</button>
+        </form>
+      </section>
+
+      <section data-panel="queue" hidden>
+        <div class="row">
+          <button data-act="clearQueue">Svuota coda</button>
+        </div>
+        <div id="queueList"></div>
+      </section>
+    </main>
+
+    <div id="toast" hidden></div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

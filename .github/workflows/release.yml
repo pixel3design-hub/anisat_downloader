@@ -1,0 +1,123 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: test estensione
+        run: node --test extension/tests/parse.test.mjs
+      - name: test servizio
+        run: cargo test --manifest-path service/Cargo.toml
+
+  build:
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release --manifest-path service/Cargo.toml
+
+      - name: impacchetta (unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp service/target/release/anisat-feed dist/
+          cp README.md COPYING dist/
+          cp packaging/icon.png dist/anisat-feed.png
+          tar -C dist -czf "anisat-feed-${{ matrix.target }}.tar.gz" .
+
+      - name: impacchetta (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item service/target/release/anisat-feed.exe dist/
+          Copy-Item README.md,COPYING dist/
+          Compress-Archive -Path dist/* -DestinationPath "anisat-feed-${{ matrix.target }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anisat-feed-${{ matrix.target }}
+          path: |
+            anisat-feed-*.tar.gz
+            anisat-feed-*.zip
+
+  deb-rpm:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            pkg_arch: amd64
+            rpm_arch: x86_64
+          - target: aarch64-unknown-linux-gnu
+            pkg_arch: arm64
+            rpm_arch: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: anisat-feed-${{ matrix.target }}
+      - name: estrai binario
+        run: |
+          mkdir -p pkg dist
+          tar -xzf "anisat-feed-${{ matrix.target }}.tar.gz" -C pkg
+      - name: installa nfpm
+        run: |
+          curl -sSL -o nfpm.tar.gz \
+            https://github.com/goreleaser/nfpm/releases/download/v2.49.0/nfpm_2.49.0_Linux_x86_64.tar.gz
+          tar -xzf nfpm.tar.gz nfpm
+          chmod +x nfpm
+      - name: pacchetti deb e rpm
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          export VERSION="${VERSION#v}"
+          PKG_ARCH="${{ matrix.pkg_arch }}" ./nfpm package --config packaging/nfpm.yaml --packager deb --target dist/
+          PKG_ARCH="${{ matrix.rpm_arch }}" ./nfpm package --config packaging/nfpm.yaml --packager rpm --target dist/
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: dist/*
+
+  release:
+    needs: [build, deb-rpm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: pubblica la release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} dist/ \;
+          ls -l dist
+          gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --generate-notes --title "${GITHUB_REF_NAME}"

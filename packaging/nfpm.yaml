@@ -1,0 +1,20 @@
+name: anisat-feed
+arch: ${PKG_ARCH}
+platform: linux
+version: ${VERSION}
+section: net
+priority: optional
+maintainer: Cristiano Gariboldo <social@pixel3design.it>
+vendor: pixel3design
+homepage: https://github.com/pixel3design-hub/anisat_downloader
+license: GPL-2.0-only
+description: |
+  Server locale del feed RSS generato dall'estensione AniSat Downloader.
+  Espone http://127.0.0.1:8787/feed.xml leggendo il file scritto dall'estensione.
+contents:
+  - src: ./pkg/anisat-feed
+    dst: /usr/bin/anisat-feed
+    file_info:
+      mode: 0755
+  - src: ./COPYING
+    dst: /usr/share/licenses/anisat-feed/COPYING

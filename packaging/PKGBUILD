@@ -1,0 +1,16 @@
+# Maintainer: Cristiano Gariboldo <social@pixel3design.it>
+pkgname=anisat-feed
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Server locale del feed RSS generato dall'estensione AniSat Downloader"
+arch=('x86_64' 'aarch64')
+url="https://github.com/pixel3design-hub/anisat_downloader"
+license=('GPL-2.0-only')
+depends=()
+source=("$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/anisat-feed-x86_64-unknown-linux-gnu.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  install -Dm755 "$srcdir/anisat-feed" "$pkgdir/usr/bin/anisat-feed"
+  install -Dm644 "$srcdir/COPYING" "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

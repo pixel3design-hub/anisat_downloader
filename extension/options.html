@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <title>AniSat Downloader — opzioni</title>
+    <style>
+      body { max-width: 520px; margin: 24px auto; background: #0f1115; color: #e7e9ee; font: 14px/1.5 system-ui, sans-serif; }
+      label { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #262b36; }
+      input { width: 90px; padding: 4px 6px; background: #171a21; color: inherit; border: 1px solid #262b36; border-radius: 6px; }
+      p.hint { color: #98a0b3; font-size: 13px; }
+      button { padding: 6px 12px; background: #7c3aed; color: #fff; border: 0; border-radius: 7px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Opzioni</h1>
+    <label>Download in parallelo <input id="concurrency" type="number" min="1" max="6" /></label>
+    <label>Intervallo aggiornamento (minuti) <input id="refreshMin" type="number" min="5" max="720" /></label>
+    <label>Sottocartella del feed <input id="feedFolder" type="text" /></label>
+    <label>Scrivi feed.xml su disco <input id="feedEnabled" type="checkbox" /></label>
+    <p class="hint">
+      Il feed finisce in <code>Download/&lt;sottocartella&gt;/feed.xml</code> e viene riscritto quando cambia.
+      Il servizio Rust lo espone su <code>http://127.0.0.1:8787/feed.xml</code>: avvialo con
+      <code>anisat-feed --feed ~/Downloads/&lt;sottocartella&gt;/feed.xml</code>.
+    </p>
+    <button id="save">Salva</button>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

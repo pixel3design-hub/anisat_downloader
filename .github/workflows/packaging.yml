@@ -1,0 +1,65 @@
+name: packaging extra
+
+# AppImage e Flatpak non bloccano la release: si generano a mano quando serve.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "tag della release (es. v0.1.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: scarica il binario della release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${{ inputs.tag }}" \
+            --pattern 'anisat-feed-x86_64-unknown-linux-gnu.tar.gz' --dir .
+          mkdir -p bin && tar -xzf anisat-feed-x86_64-unknown-linux-gnu.tar.gz -C bin
+      - name: costruisci AppImage
+        run: |
+          VERSION="${{ inputs.tag }}"
+          VERSION="${VERSION#v}" ./packaging/appimage.sh bin/anisat-feed dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: dist/*.AppImage
+
+  flatpak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: scarica l'archivio della release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "${{ inputs.tag }}" \
+            --pattern 'anisat-feed-x86_64-unknown-linux-gnu.tar.gz' --dir .
+      - name: prepara il manifest
+        run: |
+          VERSION="${{ inputs.tag }}"
+          VERSION="${VERSION#v}"
+          SHA="$(sha256sum anisat-feed-x86_64-unknown-linux-gnu.tar.gz | cut -d' ' -f1)"
+          sed -e "s/@@VERSION@@/${VERSION}/" -e "s/@@SHA256@@/${SHA}/" \
+            packaging/flatpak/it.pixel3design.anisat-feed.yml > /tmp/anisat.yml
+      - name: installa flatpak-builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y --user flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+      - name: build
+        run: |
+          flatpak-builder --user --force-clean --repo=/tmp/repo build-dir /tmp/anisat.yml
+          flatpak build-bundle /tmp/repo dist/anisat-feed.flatpak it.pixel3design.anisat-feed
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: dist/*.flatpak

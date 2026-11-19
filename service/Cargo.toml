@@ -1,0 +1,16 @@
+[package]
+name = "anisat-feed"
+version = "0.1.0"
+edition = "2021"
+description = "Server locale del feed RSS generato dall'estensione AniSat Downloader"
+license = "GPL-2.0-only"
+repository = "https://github.com/pixel3design-hub/anisat_downloader"
+authors = ["Cristiano Gariboldo <social@pixel3design.it>"]
+
+[dependencies]
+tiny_http = "0.12"
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "z"
