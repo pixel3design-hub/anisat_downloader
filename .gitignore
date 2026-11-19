@@ -1,0 +1,23 @@
+# sessione locale
+session.sh
+
+# build rust
+target/
+dist/
+build/
+.flatpak-builder/
+*.AppImage
+
+# node
+node_modules/
+
+# artefatti vari
+*.log
+*.zip
+*.deb
+*.rpm
+*.msi
+.DS_Store
+
+# piani/sessione agenti
+.agents/
