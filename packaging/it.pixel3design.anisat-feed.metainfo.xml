@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>it.pixel3design.anisat-feed</id>
+  <name>AniSat Feed</name>
+  <summary>Server locale del feed RSS dell'estensione AniSat Downloader</summary>
+
+  <developer id="it.pixel3design">
+    <name>Cristiano Gariboldo</name>
+  </developer>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-2.0-only</project_license>
+
+  <description>
+    <p>
+      Serve su HTTP il file feed.xml scritto dall'estensione AniSat Downloader per Brave,
+      così un lettore RSS ha una URL stabile sulla porta locale 8787.
+    </p>
+    <ul>
+      <li>Legge il feed a ogni richiesta: nessun riavvio dopo un aggiornamento.</li>
+      <li>Funziona anche a browser chiuso, servendo l'ultimo feed generato.</li>
+      <li>Ascolta solo su 127.0.0.1 per default.</li>
+    </ul>
+  </description>
+
+  <icon type="stock">it.pixel3design.anisat-feed</icon>
+
+  <url type="homepage">https://github.com/pixel3design-hub/anisat_downloader</url>
+  <url type="bugtracker">https://github.com/pixel3design-hub/anisat_downloader/issues</url>
+  <url type="vcs-browser">https://github.com/pixel3design-hub/anisat_downloader</url>
+
+  <provides>
+    <binary>anisat-feed</binary>
+  </provides>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.1.2" date="2026-11-19"/>
+  </releases>
+</component>

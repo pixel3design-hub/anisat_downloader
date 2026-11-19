@@ -15,6 +15,8 @@ modules:
     build-commands:
       - install -Dm755 anisat-feed /app/bin/anisat-feed
       - install -Dm644 anisat-feed.png /app/share/icons/hicolor/256x256/apps/it.pixel3design.anisat-feed.png
+      - install -Dm644 it.pixel3design.anisat-feed.desktop /app/share/applications/it.pixel3design.anisat-feed.desktop
+      - install -Dm644 it.pixel3design.anisat-feed.metainfo.xml /app/share/metainfo/it.pixel3design.anisat-feed.metainfo.xml
       - install -Dm644 COPYING /app/share/licenses/it.pixel3design.anisat-feed/COPYING
     sources:
       - type: archive

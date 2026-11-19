@@ -42,6 +42,8 @@ jobs:
           cp "service/target/${{ matrix.target }}/release/anisat-feed" dist/
           cp README.md COPYING dist/
           cp packaging/icon.png dist/anisat-feed.png
+          cp packaging/it.pixel3design.anisat-feed.desktop dist/
+          cp packaging/it.pixel3design.anisat-feed.metainfo.xml dist/
           tar -C dist -czf "anisat-feed-${{ matrix.target }}.tar.gz" .
       - uses: actions/upload-artifact@v4
         with:

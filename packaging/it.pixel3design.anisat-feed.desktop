@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AniSat Feed
+Comment=Server locale del feed RSS dell'estensione AniSat Downloader
+Exec=anisat-feed
+Icon=it.pixel3design.anisat-feed
+Terminal=true
+Categories=Network;
+Keywords=anime;rss;feed;download;
+StartupNotify=false

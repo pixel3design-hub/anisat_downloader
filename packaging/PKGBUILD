@@ -13,5 +13,10 @@ sha256sums=('SKIP')
 package() {
   install -Dm755 "$srcdir/anisat-feed" "$pkgdir/usr/bin/anisat-feed"
   install -Dm644 "$srcdir/COPYING" "$pkgdir/usr/share/licenses/$pkgname/COPYING"
-  install -Dm644 "$srcdir/anisat-feed.png" "$pkgdir/usr/share/icons/hicolor/256x256/apps/anisat-feed.png"
+  install -Dm644 "$srcdir/anisat-feed.png" \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/it.pixel3design.anisat-feed.png"
+  install -Dm644 "$srcdir/it.pixel3design.anisat-feed.desktop" \
+    "$pkgdir/usr/share/applications/it.pixel3design.anisat-feed.desktop"
+  install -Dm644 "$srcdir/it.pixel3design.anisat-feed.metainfo.xml" \
+    "$pkgdir/usr/share/metainfo/it.pixel3design.anisat-feed.metainfo.xml"
 }

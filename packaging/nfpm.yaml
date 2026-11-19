@@ -11,12 +11,27 @@ license: GPL-2.0-only
 description: |
   Server locale del feed RSS generato dall'estensione AniSat Downloader.
   Espone http://127.0.0.1:8787/feed.xml leggendo il file scritto dall'estensione.
+
+rpm:
+  packager: Cristiano Gariboldo <social@pixel3design.it>
+  group: Applications/Internet
+  summary: Server locale del feed RSS dell'estensione AniSat Downloader
+
+deb:
+  fields:
+    Bugs: https://github.com/pixel3design-hub/anisat_downloader/issues
+
 contents:
   - src: ./pkg/anisat-feed
     dst: /usr/bin/anisat-feed
     file_info:
       mode: 0755
+  # AppStream + .desktop + icona: senza questi il software center mostra un'icona generica
+  - src: ./packaging/it.pixel3design.anisat-feed.metainfo.xml
+    dst: /usr/share/metainfo/it.pixel3design.anisat-feed.metainfo.xml
+  - src: ./packaging/it.pixel3design.anisat-feed.desktop
+    dst: /usr/share/applications/it.pixel3design.anisat-feed.desktop
   - src: ./packaging/icon.png
-    dst: /usr/share/icons/hicolor/256x256/apps/anisat-feed.png
+    dst: /usr/share/icons/hicolor/256x256/apps/it.pixel3design.anisat-feed.png
   - src: ./COPYING
     dst: /usr/share/licenses/anisat-feed/COPYING

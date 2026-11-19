@@ -34,6 +34,10 @@ Binari precompilati: vedi [Releases](https://github.com/pixel3design-hub/anisat_
 dipende dalla disponibilità dei runner GitHub e viene caricato a parte. AppImage e Flatpak si
 generano dal workflow manuale *packaging extra*.
 
+I pacchetti `.deb`/`.rpm` installano anche `.desktop`, metainfo AppStream e icona in
+`hicolor/256x256`: dopo l'installazione `anisat-feed` compare con la sua icona nel menu applicazioni
+e nella pagina "Installati" del software center (KDE Discover, GNOME Software).
+
 ## Come funziona lo scraping (verificato sul sito)
 
 | Passo | Endpoint |
