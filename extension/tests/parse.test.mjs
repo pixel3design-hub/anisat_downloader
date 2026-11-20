@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as site from '../sites/animesaturn.js';
 import { buildFeed, medianInterval } from '../lib/feed.js';
+import { groupSeries, missingSeasons, statusKey } from '../lib/group.js';
 
 const read = (f) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8');
 
@@ -17,6 +18,7 @@ const PLAYLIST = read('playlist.json');
 const PROFILE_HTML = read('profile.html');
 const WATCHLIST_HTML = read('watchlist.html');
 const CALENDAR_HTML = read('calendar.html');
+const LOGIN_HTML = read('login.html');
 const SERIES_URL = 'https://www.animesaturn.net/anime/reincarnated-as-a-sword-season-2-j9hRW';
 
 const realFetch = globalThis.fetch;
@@ -141,6 +143,69 @@ test('watchlist: oltre il tetto si tronca e lo dice', () => {
   assert.equal(w.rows.length, site.LIST_CAP);
   assert.equal(w.truncated, true);
   assert.equal(w.rows[0].year, 2021);
+});
+
+test('sezioni: ogni serie finisce nello stato della sua watchlist', () => {
+  assert.equal(statusKey('In corso'), 'watching');
+  assert.equal(statusKey('Da guardare'), 'planned');
+  assert.equal(statusKey('Completati'), 'completed');
+  assert.equal(statusKey('Droppati'), 'dropped');
+  assert.equal(statusKey('boh'), 'none');
+  assert.equal(statusKey(''), 'none');
+
+  const sections = groupSeries([
+    { slug: 'a1', title: 'Mob Psycho 100', listStatus: 'In corso' },
+    { slug: 'a2', title: 'Mob Psycho 100 2', listStatus: 'In corso' },
+    { slug: 'b1', title: 'Tokyo Revengers', listStatus: 'Da guardare' },
+    { slug: 'c1', title: 'Serie Finita', listStatus: 'Completati' },
+    { slug: 'd1', title: 'Serie Mollata', listStatus: 'Droppati' },
+    { slug: 'e1', title: 'Aggiunta a mano' },
+  ]);
+
+  assert.deepEqual(sections.map((s) => [s.key, s.count]), [
+    ['watching', 2],
+    ['planned', 1],
+    ['completed', 1],
+    ['dropped', 1],
+    ['none', 1],
+  ]);
+  // le due stagioni della stessa serie restano nella stessa famiglia, in ordine
+  assert.equal(sections[0].families.length, 1);
+  assert.deepEqual(sections[0].families[0].seasons.map((s) => s.season), [1, 2]);
+});
+
+test('stagioni mancanti: solo quelle non già nei preferiti', () => {
+  const family = [{ slug: 's1' }, { slug: 's2' }, { slug: 's3' }];
+  assert.deepEqual(missingSeasons(family, ['s1', 's3']).map((s) => s.slug), ['s2']);
+  assert.deepEqual(missingSeasons(family, ['s1', 's2', 's3']), []);
+  assert.deepEqual(missingSeasons([], ['s1']), []);
+});
+
+test('login: token CSRF dal form e credenziali rifiutate', async () => {
+  assert.equal(site.parseCsrf(LOGIN_HTML), 'csrf-di-prova');
+  assert.equal(site.parseCsrf('<html></html>'), '');
+
+  const stub = globalThis.fetch;
+  let posted = null;
+  const answer = (finalUrl) => async (url, opts = {}) => {
+    if (!opts.method) return new Response(LOGIN_HTML, { status: 200 });
+    posted = new URLSearchParams(opts.body);
+    const r = new Response('', { status: 200 });
+    Object.defineProperty(r, 'url', { value: finalUrl });
+    return r;
+  };
+  try {
+    globalThis.fetch = answer('https://www.animesaturn.net/login');
+    await assert.rejects(() => site.login('utente', 'sbagliata'), /credenziali rifiutate/);
+    assert.equal(posted.get('_csrf'), 'csrf-di-prova');
+    assert.equal(posted.get('login'), 'utente');
+    assert.equal(posted.get('remember'), '1');
+
+    globalThis.fetch = answer('https://www.animesaturn.net/profile/286');
+    assert.deepEqual(await site.login('utente', 'giusta'), { ok: true, path: '/profile/286' });
+  } finally {
+    globalThis.fetch = stub;
+  }
 });
 
 test('markup: i modificatori di classe non azzerano watchlist e preferiti', () => {

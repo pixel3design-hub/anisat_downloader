@@ -10,7 +10,7 @@ async function api(type, extra = {}) {
 
 const FEED_PORT = 8787;
 
-const { settings } = await api('state');
+const { settings, hasLogin, loginUser } = await api('state');
 
 $('concurrency').value = settings.concurrency;
 $('downloadFolder').value = settings.downloadFolder;
@@ -18,6 +18,17 @@ $('refreshMin').value = settings.refreshMin;
 $('feedServer').value = settings.feedServer;
 $('accountProfile').value = settings.accountProfile || '';
 $('importWatched').checked = settings.importWatched !== false;
+
+function showLogin(state, text) {
+  const el = $('loginStatus');
+  el.className = 'status';
+  if (state === 'ok') el.className = 'status ok';
+  if (state === 'bad') el.className = 'status bad';
+  el.textContent = text;
+}
+
+$('loginUser').value = loginUser || '';
+showLogin(hasLogin ? 'ok' : '', hasLogin ? `login salvato per ${loginUser}` : 'nessun login (facoltativo)');
 
 $('save').addEventListener('click', async () => {
   const patch = {
@@ -35,6 +46,30 @@ $('save').addEventListener('click', async () => {
   } catch (e) {
     $('saved').textContent = `Errore: ${e.message}`;
   }
+});
+
+$('saveLogin').addEventListener('click', async () => {
+  const el = $('loginUser').value.trim();
+  const pass = $('loginPass').value;
+  if (!el) {
+    showLogin('bad', 'inserisci username o email');
+    return;
+  }
+  showLogin('', 'accedo…');
+  try {
+    const r = await api('login', { user: el, password: pass });
+    $('loginPass').value = '';
+    showLogin('ok', `acceduto come ${r.user}`);
+  } catch (e) {
+    showLogin('bad', e.message);
+  }
+});
+
+$('forgetLogin').addEventListener('click', async () => {
+  await api('logout');
+  $('loginUser').value = '';
+  $('loginPass').value = '';
+  showLogin('', 'login dimenticato');
 });
 
 $('checkProfile').addEventListener('click', async () => {

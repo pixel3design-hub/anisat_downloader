@@ -92,6 +92,23 @@
     </section>
 
     <section>
+      <h2>Login AnimeSaturn (facoltativo)</h2>
+      <label>Username o email <input id="loginUser" type="text" autocomplete="username" /></label>
+      <label>Password <input id="loginPass" type="password" autocomplete="current-password" placeholder="lascia vuoto per tenere quella salvata" /></label>
+      <div class="row">
+        <button id="saveLogin" class="secondary">Accedi e salva</button>
+        <button id="forgetLogin" class="secondary">Dimentica</button>
+        <span id="loginStatus" class="status">nessun login</span>
+      </div>
+      <p class="hint">
+        Serve solo per i profili privati e per le pagine che richiedono l'accesso: senza login
+        restano le liste pubbliche, che bastano per watchlist e calendario di un profilo pubblico.
+        La password resta nel profilo del browser (<code>chrome.storage.local</code>), non viene
+        inviata al servizio <code>anisat-feed</code> e non viene mai rimandata al popup.
+      </p>
+    </section>
+
+    <section>
       <h2>Servizio anisat-feed</h2>
       <p class="hint">Eseguibile per Windows, Linux e macOS:</p>
       <ul>

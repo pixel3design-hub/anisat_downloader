@@ -29,6 +29,7 @@
         </div>
         <div class="row">
           <button data-act="refreshAll">Aggiorna tutte</button>
+          <button data-act="seasonSuggestions">Suggerisci stagioni</button>
           <button data-act="openFeed">Apri feed</button>
           <button data-act="pushFeed">Invia feed</button>
         </div>
@@ -48,6 +49,11 @@
           <input id="url" placeholder="…oppure incolla l'URL della serie" />
           <button>Aggiungi</button>
         </form>
+        <form id="peekForm">
+          <input id="peek" placeholder="Sbircia una watchlist: numero del profilo (es. 286)" />
+          <button>Sbircia</button>
+        </form>
+        <div id="peekResult"></div>
       </section>
 
       <section data-panel="queue" hidden>

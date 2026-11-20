@@ -21,7 +21,7 @@ let lastFeedXml = null;
 // --- storage -------------------------------------------------------------
 
 async function store() {
-  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState', 'serviceOk', 'account']);
+  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState', 'serviceOk', 'account', 'credentials']);
   return {
     series: s.series || {},
     episodes: s.episodes || {},
@@ -32,6 +32,7 @@ async function store() {
     feedState: s.feedState || { ok: null, at: null, bytes: 0 },
     serviceOk: s.serviceOk ?? null,
     account: s.account || null,
+    credentials: s.credentials || null,
     settings: { ...DEFAULTS, ...(s.settings || {}) },
   };
 }
@@ -45,7 +46,7 @@ export async function refreshSeries(slug) {
   const known = st.series[slug];
   const full = await site.series(known?.url || site.seriesUrl(slug));
   const { episodes, ...meta } = full;
-  st.series[slug] = { ...known, ...meta, addedAt: known?.addedAt || Date.now(), favorite: true };
+  st.series[slug] = { ...known, ...meta, addedAt: known?.addedAt || Date.now(), favorite: known?.favorite ?? true };
   st.episodes[slug] = episodes;
 
   // primo contatto: ricava la data dell'ultimo episodio uscito (granularità giorno)
@@ -105,9 +106,67 @@ async function accountImport({ input } = {}) {
     calendar: st.account?.calendar || [],
   };
   await put({ account });
+  // lo stato watchlist delle serie già presenti si aggiorna senza rete
+  const badges = new Map((p.watchlist || []).map((w) => [w.slug, w.badge]));
+  const series = { ...st.series };
+  let changed = false;
+  for (const [slug, s] of Object.entries(series)) {
+    const badge = badges.get(slug);
+    if (badge && badge !== s.listStatus) {
+      series[slug] = { ...s, listStatus: badge };
+      changed = true;
+    }
+  }
+  if (changed) await put({ series });
   // il calendario serve subito: senza, il primo feed userebbe solo la stima
   await calendarRefresh().catch(() => {});
   return (await store()).account;
+}
+
+// --- preferiti locali (cuore) -------------------------------------------
+
+async function likeSeries({ slug, value }) {
+  const st = await store();
+  if (!st.series[slug]) throw new Error('serie non trovata');
+  st.series[slug] = { ...st.series[slug], favorite: Boolean(value) };
+  await put({ series: st.series });
+  const push = await pushFeed({ quiet: true });
+  return { slug, favorite: st.series[slug].favorite, push };
+}
+
+// --- stagioni mancanti ---------------------------------------------------
+
+// Per ogni famiglia già nei preferiti cerca nel sito le altre stagioni.
+// Una richiesta per famiglia, solo su clic.
+async function seasonSuggestions() {
+  const st = await store();
+  const list = Object.values(st.series);
+  const families = new Map();
+  for (const s of list) {
+    const t = site.parseTitle(s.title || s.slug);
+    const key = `${t.base}|${t.lang}`;
+    if (!families.has(key)) families.set(key, []);
+    families.get(key).push(s);
+  }
+
+  const watchlist = new Set((st.account?.watchlist || []).map((w) => w.slug));
+  const out = [];
+  for (const members of families.values()) {
+    const first = members[0];
+    let family = [];
+    try {
+      family = await site.seasons(first.url || site.seriesUrl(first.slug));
+    } catch {
+      continue; // pagina non raggiungibile: le altre famiglie continuano
+    }
+    const missing = family.filter((f) => !members.some((m) => m.slug === f.slug));
+    if (!missing.length) continue;
+    out.push({
+      name: first.title,
+      seasons: missing.map((f) => ({ ...f, inWatchlist: watchlist.has(f.slug) })),
+    });
+  }
+  return out;
 }
 
 // Aggiunge ai preferiti le serie scelte (o tutte quelle del profilo).
@@ -119,11 +178,14 @@ async function accountAdd({ slugs } = {}) {
 
   const bySlug = new Map(rows.map((w) => [w.slug, w]));
   const seen = { ...st.seen };
+  const series = { ...st.series };
   let added = 0;
 
   for (const slug of chosen) {
     const info = await refreshSeries(slug);
     added++;
+    // lo stato della watchlist serve alle sezioni del popup
+    series[slug] = { ...info, listStatus: bySlug.get(slug)?.badge || '' };
     // il sito dà solo il conteggio dei visti: 1..watched, e solo se non hai già segni tuoi
     const watched = bySlug.get(slug)?.watched || 0;
     if (st.settings.importWatched && watched > 0 && !(seen[slug] || []).length) {
@@ -132,7 +194,7 @@ async function accountAdd({ slugs } = {}) {
     }
   }
 
-  await put({ seen });
+  await put({ seen, series });
   const push = await pushFeed({ quiet: true });
   return { added, push };
 }
@@ -471,7 +533,11 @@ async function exportList(slug, ns) {
 // --- messaggi -----------------------------------------------------------
 
 const handlers = {
-  state: async () => store(),
+  state: async () => {
+    const st = await store();
+    const { credentials, ...rest } = st;
+    return { ...rest, hasLogin: Boolean(credentials?.user), loginUser: credentials?.user || '' };
+  },
   search: ({ q }) => site.search(q),
   seasons: ({ url }) => site.seasons(url),
   add: ({ slugs, url }) => addSeries(slugs || url),
@@ -486,6 +552,22 @@ const handlers = {
   accountImport: (msg) => accountImport(msg),
   accountAdd: (msg) => accountAdd(msg),
   calendarRefresh: () => calendarRefresh(),
+  like: (msg) => likeSeries(msg),
+  seasonSuggestions: () => seasonSuggestions(),
+  peek: ({ input } = {}) => site.profile(input),
+  login: async ({ user, password } = {}) => {
+    const st = await store();
+    const name = String(user || st.credentials?.user || '').trim();
+    const pass = String(password || st.credentials?.pass || '');
+    if (!name || !pass) throw new Error('servono username e password (la password non si rilegge da quella salvata)');
+    const res = await site.login(name, pass);
+    await put({ credentials: { user: name, pass, at: Date.now() } });
+    return { ...res, user: name };
+  },
+  logout: async () => {
+    await webext.storage.local.remove('credentials');
+    return { ok: true };
+  },
   download: ({ slug, ns }) => enqueue(slug, ns),
   retry: async ({ slug, n }) => {
     const st = await store();

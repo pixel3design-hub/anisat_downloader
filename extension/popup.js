@@ -1,9 +1,10 @@
 import { api as webext } from './lib/api.js';
+import { groupSeries } from './lib/group.js';
 import { calendarTs } from './sites/animesaturn.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let st = { series: {}, episodes: {}, seen: {}, queue: [], news: {}, settings: {}, feedState: {}, account: null };
+let st = { series: {}, episodes: {}, seen: {}, queue: [], news: {}, settings: {}, feedState: {}, account: null, hasLogin: false };
 
 if (new URLSearchParams(location.search).has('tab')) document.body.classList.add('tab');
 
@@ -117,15 +118,18 @@ const open = new Set();
 
 function seriesCard(s) {
   const news = st.news[s.slug] || 0;
+  const fav = s.favorite !== false;
   const el = document.createElement('article');
-  el.className = 'card';
+  el.className = `card ${fav ? '' : 'unliked'}`;
   el.dataset.slug = s.slug;
   el.innerHTML = `
     <img src="${esc(s.poster)}" alt="" loading="lazy">
     <div>
       <h3>${esc(s.title)}${news ? `<span class="badge">${news}</span>` : ''}</h3>
-      <p>${s.airedEps}/${s.totalEps} episodi · ${esc(s.status || '')}</p>
+      <p>${s.airedEps}/${s.totalEps} episodi · ${esc(s.status || '')}${s.listStatus && s.listStatus !== s.status ? ` · ${esc(s.listStatus)}` : ''}</p>
     </div>
+    <button class="heart ${fav ? 'on' : ''}" data-act="like" data-slug="${esc(s.slug)}" data-value="${fav ? 0 : 1}"
+      title="${fav ? 'Nei preferiti: togli dal feed' : 'Non nei preferiti: aggiungi al feed'}">♥</button>
     <div class="actions">
       <button data-act="toggle" data-slug="${esc(s.slug)}">Episodi</button>
       <button data-act="new" data-slug="${esc(s.slug)}">Scarica nuovi</button>
@@ -137,9 +141,28 @@ function seriesCard(s) {
 }
 
 function renderSeries() {
-  const list = Object.values(st.series).sort((a, b) => a.title.localeCompare(b.title));
+  const list = Object.values(st.series);
   const box = $('#seriesList');
-  box.replaceChildren(...list.map(seriesCard));
+
+  // una sezione per stato della watchlist, con le stagioni della stessa serie vicine
+  const nodes = [];
+  for (const section of groupSeries(list)) {
+    const head = document.createElement('h2');
+    head.className = 'group';
+    head.textContent = `${section.label} (${section.count})`;
+    head.dataset.group = section.key;
+    nodes.push(head);
+    for (const fam of section.families) {
+      if (fam.seasons.length > 1) {
+        const label = document.createElement('p');
+        label.className = 'family';
+        label.textContent = `${fam.title} · ${fam.seasons.length} stagioni`;
+        nodes.push(label);
+      }
+      nodes.push(...fam.seasons.map(seriesCard));
+    }
+  }
+  box.replaceChildren(...nodes);
   $('#emptyHint').hidden = list.length > 0;
   for (const slug of open) fillEps(slug);
 
@@ -421,6 +444,72 @@ async function commitProfile(slugs) {
   }
 }
 
+// --- suggerimenti stagioni ----------------------------------------------
+
+function openSeasonModal(groups) {
+  const rows = groups
+    .map(
+      (g) => `<p class="hint"><strong>${esc(g.name)}</strong></p>` +
+        g.seasons
+          .map((s) => {
+            const meta = [
+              `${s.aired ?? '?'}${s.total && s.total !== s.aired ? `/${s.total}` : ''} episodi`,
+              s.status,
+              s.inWatchlist ? 'nella watchlist' : '<strong>non nella watchlist</strong>',
+            ]
+              .filter(Boolean)
+              .join(' · ');
+            return `<label class="season">
+              <input type="checkbox" value="${esc(s.slug)}" checked>
+              <span><strong>Stagione ${s.season}</strong> — ${esc(s.title)}<br>
+              <small>${meta}</small></span>
+            </label>`;
+          })
+          .join(''),
+    )
+    .join('');
+
+  openModal(
+    'Stagioni che non hai ancora',
+    `<p class="hint">Trovate cercando nella famiglia di ogni serie già nei preferiti.</p>${rows}`,
+    [
+      {
+        label: 'Aggiungi selezionate',
+        onClick: async () => {
+          const slugs = [...document.querySelectorAll('#modalBody input:checked')].map((i) => i.value);
+          if (!slugs.length) return toast('Seleziona almeno una stagione');
+          closeModal();
+          await commitAdd(slugs);
+        },
+      },
+      { label: 'Chiudi', secondary: true, onClick: closeModal },
+    ],
+  );
+}
+
+// --- sbircia un profilo (senza importare) -------------------------------
+
+function renderPeek(acc) {
+  const rows = (acc.watchlist || [])
+    .map(
+      (r) => `<div class="q">
+        <div>${esc(r.title)} <small>${esc(r.badge)}</small><br>
+        <small>${r.type ? `${esc(r.type)} · ` : ''}${r.year || ''}${r.total != null ? ` · Episodi ${r.watched}/${r.total}` : ''}</small></div>
+      </div>`,
+    )
+    .join('');
+  const favs = (acc.favorites || []).map((f) => esc(f.title)).join(' · ') || 'nessuno';
+
+  $('#peekResult').innerHTML = `
+    <div class="peek">
+      <p><strong>${esc(acc.name || `profilo ${acc.id}`)}</strong> <small>id ${esc(acc.id)}</small><br>
+      <small>watchlist ${acc.watchlist?.length || 0}${acc.truncated ? ' (troncata)' : ''} · preferiti ${acc.favorites?.length || 0}</small></p>
+      <p class="hint">Preferiti: ${favs}</p>
+      ${rows || '<p class="hint">Watchlist vuota o non pubblica.</p>'}
+      <p class="hint">Sola lettura: niente è stato aggiunto ai tuoi preferiti.</p>
+    </div>`;
+}
+
 // --- ricerca ------------------------------------------------------------
 
 $('#searchForm').addEventListener('submit', async (ev) => {
@@ -448,6 +537,18 @@ $('#urlForm').addEventListener('submit', async (ev) => {
   const url = $('#url').value.trim();
   if (!url) return;
   await addFlow(url);
+});
+
+$('#peekForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const input = $('#peek').value.trim();
+  if (!input) return;
+  $('#peekResult').innerHTML = '<p class="hint">Guardo il profilo…</p>';
+  try {
+    renderPeek(await api('peek', { input }));
+  } catch (e) {
+    $('#peekResult').innerHTML = `<p class="hint">${esc(e.message)}</p>`;
+  }
 });
 
 // --- azioni -------------------------------------------------------------
@@ -509,6 +610,21 @@ document.addEventListener('click', async (ev) => {
         await api('refresh', {});
         await load();
         return toast('Aggiornato');
+      case 'seasonSuggestions': {
+        toast('Cerco le stagioni mancanti…');
+        let groups;
+        try {
+          groups = await api('seasonSuggestions');
+        } catch (e) {
+          return toast(`Errore: ${e.message}`);
+        }
+        if (!groups.length) return toast('Nessuna stagione mancante trovata');
+        return openSeasonModal(groups);
+      }
+      case 'like':
+        await api('like', { slug, value: btn.dataset.value === '1' });
+        await load();
+        return toast(btn.dataset.value === '1' ? 'Aggiunta ai preferiti' : 'Tolta dai preferiti');
       case 'openFeed':
         return webext.tabs.create({ url: 'http://127.0.0.1:8787/feed.xml' });
       case 'pushFeed':

@@ -1,0 +1,30 @@
+<html><body>
+<form method="post" action="/login">
+        <input type="hidden" name="_csrf" value="csrf-di-prova">        
+        <div class="user-field">
+    <label for="field-login" class="user-field__label">Username o email</label>
+            <input id="field-login" name="login" type="text" class="input" value="" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="Il tuo username o la tua email" required>
+    </div>
+        <div class="user-field">
+    <label for="field-password" class="user-field__label">Password</label>
+            <span class="user-secret" x-data="{ shown: false }">
+            <input id="field-password" name="password" type="password" :type="shown ? 'text' : 'password'" class="input" autocomplete="current-password" maxlength="128" placeholder="La tua password" required>
+            <button type="button" class="user-secret__toggle" x-cloak @click="shown = !shown" :aria-label="shown ? 'Nascondi password' : 'Mostra password'" aria-label="Mostra password">
+                <svg x-show="!shown" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg x-show="shown" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.4 5.2A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.7 17.7 0 0 1-3.2 4.1M6.3 6.3C3.6 8 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 4.3-1"/></svg>
+            </button>
+        </span>
+    </div>
+
+        
+        <div class="user-row">
+            <label class="user-check">
+                <input type="checkbox" name="remember" value="1" checked>
+                <span>Ricordami</span>
+            </label>
+            <a href="/password/forgot" class="user-link">Password dimenticata?</a>
+        </div>
+
+        <button type="submit" class="btn-primary w-full">Accedi</button>
+    </form>
+</body></html>

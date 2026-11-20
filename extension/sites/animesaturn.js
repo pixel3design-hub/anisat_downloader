@@ -261,9 +261,10 @@ export function profileId(input) {
   return m ? String(Number(m[1])) : null;
 }
 
-// Pagina pubblica: niente cookie, altrimenti un profilo privato sembrerebbe nostro.
+// Pagina pubblica: i cookie si mandano solo se l'utente ha salvato un login,
+// così un profilo privato resta un errore per chi non ha i permessi.
 async function publicPage(url) {
-  const r = await fetch(url, { credentials: 'omit', cache: 'no-store' });
+  const r = await fetch(url, { credentials: 'include', cache: 'no-store' });
   if (r.status === 404) throw new Error('profilo non trovato (404)');
   if (r.status === 401 || r.status === 403) throw new Error('profilo non pubblico');
   if (!r.ok) throw new Error(`HTTP ${r.status} su ${url}`);
@@ -427,6 +428,29 @@ export function calendarTs(entry) {
   const t = /^(\d{1,2}):(\d{2})$/.exec(String(entry?.time || ''));
   const ts = new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3]), t ? Number(t[1]) : 0, t ? Number(t[2]) : 0).getTime();
   return Number.isNaN(ts) ? null : ts;
+}
+
+// --- login facoltativo ----------------------------------------------------
+
+// token antifrode del form /login
+export function parseCsrf(html) {
+  return firstMatch(/name="_csrf" value="([^"]+)"/, html) || '';
+}
+
+// POST del form /login: il sito risponde 303 (a /profile/<id> se le credenziali
+// vanno bene, di nuovo a /login se no) e mette il cookie di sessione.
+export async function login(user, pass) {
+  const csrf = parseCsrf(await publicPage(`${SITE}/login`));
+  if (!csrf) throw new Error('token CSRF non trovato (markup del sito cambiato?)');
+  const r = await fetch(`${SITE}/login`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: csrf, login: user, password: pass, remember: '1' }).toString(),
+  });
+  const path = new URL(r.url || `${SITE}/login`).pathname;
+  if (path.startsWith('/login')) throw new Error('credenziali rifiutate dal sito');
+  return { ok: r.ok, path };
 }
 
 // --- feed globale episodi ----------------------------------------------
