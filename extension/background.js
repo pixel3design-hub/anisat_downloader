@@ -5,7 +5,6 @@
 
 import { api as webext } from './lib/api.js';
 import * as site from './sites/animesaturn.js';
-import { getDir, permission, writeStream } from './lib/folder.js';
 import { buildFeed } from './lib/feed.js';
 
 const DEFAULTS = {
@@ -20,7 +19,7 @@ let lastFeedXml = null;
 // --- storage -------------------------------------------------------------
 
 async function store() {
-  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState']);
+  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState', 'serviceOk']);
   return {
     series: s.series || {},
     episodes: s.episodes || {},
@@ -29,6 +28,7 @@ async function store() {
     queue: s.queue || [],
     news: s.news || {},
     feedState: s.feedState || { ok: null, at: null, bytes: 0 },
+    serviceOk: s.serviceOk ?? null,
     settings: { ...DEFAULTS, ...(s.settings || {}) },
   };
 }
@@ -240,10 +240,7 @@ async function pump() {
   // giro precedente interrotto prima di avere un downloadId: torna in coda
   for (const q of st.queue) if (q.state === 'downloading' && !q.downloadId) q.state = 'queued';
 
-  // cartella scelta una volta sola: se il permesso regge, si scrive lì senza dialogo
-  const dir = await getDir();
-  const folderOk = Boolean(dir) && (await permission(dir)) === 'granted';
-
+  const server = String(st.settings.feedServer || DEFAULTS.feedServer).replace(/\/+$/, '');
   let active = st.queue.filter((q) => q.state === 'downloading').length;
   const running = [];
 
@@ -260,11 +257,13 @@ async function pump() {
       q.expiresAt = r.expiresAt;
       const rel = fileName(st.series[q.slug], q.n, st.settings.downloadFolder);
 
-      if (folderOk) {
-        // scrittura diretta: nessun "salva con nome", e in parallelo senza bloccare la coda
+      // il servizio scrive nella sua cartella: nessun dialogo "salva con nome"
+      const sent = await sendToServer(server, q, rel, r.url);
+      if (sent) {
+        q.via = 'server';
         q.progress = 0;
-        running.push(writeOne(dir, q, rel, st));
       } else {
+        q.via = 'browser';
         q.downloadId = await webext.downloads.download({
           url: r.url,
           filename: rel,
@@ -280,24 +279,58 @@ async function pump() {
   }
 
   await Promise.allSettled(running);
+  pollJobs();
 }
 
-async function writeOne(dir, q, rel, st) {
+async function sendToServer(server, q, rel, url) {
   try {
-    const { bytes } = await writeStream(dir, rel, q.url, (done, total) => {
-      q.progress = total ? Math.min(99, Math.round((done / total) * 100)) : (q.progress || 0);
-      put({ queue: st.queue });
+    const r = await fetch(`${server}/download`, {
+      method: 'POST',
+      body: JSON.stringify({ id: `${q.slug}#${q.n}`, url, path: rel }),
+      headers: { 'content-type': 'text/plain;charset=UTF-8' },
     });
-    q.state = 'done';
-    q.bytes = bytes;
-    q.path = rel;
-    q.progress = 100;
-  } catch (e) {
-    q.state = 'error';
-    q.error = String(e?.message || e);
+    if (!r.ok) return false;
+    await put({ serviceOk: true });
+    return true;
+  } catch {
+    await put({ serviceOk: false });
+    return false;
   }
-  await put({ queue: st.queue });
 }
+
+// il servizio espone lo stato dei download in /jobs: qui si riporta nella coda
+async function pollJobs() {
+  const st = await store();
+  const active = st.queue.filter((q) => q.via === 'server' && q.state === 'downloading');
+  if (!active.length) return;
+
+  const server = String(st.settings.feedServer || DEFAULTS.feedServer).replace(/\/+$/, '');
+  try {
+    const r = await fetch(`${server}/jobs`, { cache: 'no-store' });
+    const { jobs = [] } = await r.json();
+    const byId = new Map(jobs.map((j) => [j.id, j]));
+    for (const q of active) {
+      const job = byId.get(`${q.slug}#${q.n}`);
+      if (!job) continue;
+      q.progress = job.total ? Math.min(99, Math.round((job.done / job.total) * 100)) : (q.progress || 0);
+      if (job.state === 'done') {
+        q.state = 'done';
+        q.progress = 100;
+        q.bytes = job.done;
+      } else if (job.state === 'error') {
+        q.state = 'error';
+        q.error = job.error || 'errore nel servizio';
+      }
+    }
+    await put({ queue: st.queue });
+  } catch {
+    // servizio sparito: la coda resta "in corso" finché non torna il polling successivo
+  }
+
+  const still = (await store()).queue.some((q) => q.via === 'server' && q.state === 'downloading');
+  if (still) setTimeout(pollJobs, 4000);
+}
+
 
 webext.downloads.onChanged.addListener(async (delta) => {
   if (!delta.state) return;
@@ -345,11 +378,7 @@ async function exportList(slug, ns) {
 // --- messaggi -----------------------------------------------------------
 
 const handlers = {
-  state: async () => {
-    const st = await store();
-    const dir = await getDir();
-    return { ...st, folder: dir ? { name: dir.name, permission: await permission(dir) } : null };
-  },
+  state: async () => store(),
   search: ({ q }) => site.search(q),
   seasons: ({ url }) => site.seasons(url),
   add: ({ slugs, url }) => addSeries(slugs || url),

@@ -69,13 +69,15 @@ store vedi [docs/PUBLISHING.md](docs/PUBLISHING.md).
 
 ### Cartella dei download
 
-La prima volta apri le opzioni e premi *Scegli cartella…*: da quel momento gli episodi finiscono lì
-dentro `AniSatDownloader/<serie>/`, scritti in streaming mentre scaricano, senza chiedere più nulla.
+I download li fa il servizio, non il browser. La cartella si imposta una volta nella pagina di
+configurazione (campo *Cartella dei download*, default `~/Downloads/AniSatDownloader`) e da lì gli
+episodi vengono scritti direttamente, con la percentuale che avanza nella scheda Coda.
 
-Se non scegli una cartella l'estensione usa quella predefinita del browser. Con l'opzione di Brave
-"chiedi dove salvare ogni file" attiva, il percorso viene domandato per ogni episodio: o scegli la
-cartella dall'estensione, o disattivi quell'opzione. Dopo un riavvio il browser può richiedere di
-nuovo il permesso sulla cartella, e in quel caso il popup mostra "Riautorizza".
+Perché non lo fa il browser: se in Brave è attiva l'opzione *chiedi dove salvare ogni file*,
+`chrome.downloads` apre il dialogo a ogni episodio, e la File System Access API non risolve perché un
+handle ripreso da IndexedDB torna con permesso `prompt` fuori dalla pagina che l'ha scelto. Con il
+servizio attivo non compare nessun dialogo. Se il servizio non è in esecuzione l'estensione torna a
+`chrome.downloads` sulla cartella predefinita del browser, e lì vale l'opzione di Brave.
 
 ### Servizio feed
 

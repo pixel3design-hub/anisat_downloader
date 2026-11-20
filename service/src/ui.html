@@ -59,6 +59,7 @@
       <form id="cfg">
         <label>Nome del feed <input id="name" type="text" maxlength="120" /></label>
         <label>Indirizzo di ascolto <input id="bind" type="text" placeholder="127.0.0.1:8787" /></label>
+        <label>Cartella dei download <input id="download_dir" type="text" placeholder="~/Downloads/AniSatDownloader" /></label>
         <label>Controlli ogni (minuti) <input id="check_min" type="number" min="5" max="1440" /></label>
         <label>Controlla aggiornamenti su GitHub <input id="version_check" type="checkbox" /></label>
         <div class="row" style="margin-top: 14px">
@@ -112,6 +113,7 @@
         const c = await r.json();
         $('name').value = c.name;
         $('bind').value = c.bind;
+        $('download_dir').value = c.download_dir;
         $('check_min').value = c.check_min;
         $('version_check').checked = c.version_check;
       }
@@ -138,6 +140,7 @@
           name: $('name').value,
           bind: $('bind').value,
           check_min: Number($('check_min').value),
+          download_dir: $('download_dir').value,
           version_check: $('version_check').checked,
         });
         $('saveResult').textContent = 'salvo…';

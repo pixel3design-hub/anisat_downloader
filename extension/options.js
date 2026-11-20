@@ -1,7 +1,6 @@
 import { api as webext } from './lib/api.js';
 const $ = (id) => document.getElementById(id);
 
-import { pickDir, getDir, clearDir, permission } from './lib/folder.js';
 
 async function api(type, extra = {}) {
   const r = await webext.runtime.sendMessage({ type, ...extra });
@@ -12,44 +11,6 @@ async function api(type, extra = {}) {
 const FEED_PORT = 8787;
 
 const { settings } = await api('state');
-
-async function showFolder() {
-  const el = $('folderStatus');
-  const handle = await getDir();
-  if (!handle) {
-    el.className = 'status';
-    el.textContent = 'nessuna cartella scelta (si usa Download del browser)';
-    return;
-  }
-  const p = await permission(handle);
-  el.className = `status ${p === 'granted' ? 'ok' : 'bad'}`;
-  el.textContent = `${handle.name} · permesso ${p === 'granted' ? 'attivo' : 'da rinnovare dal popup'}`;
-}
-
-// Firefox non ha la File System Access API: resta la cartella Download del browser
-const canPickFolder = typeof window.showDirectoryPicker === 'function';
-if (!canPickFolder) {
-  $('pickFolder').disabled = true;
-  $('forgetFolder').disabled = true;
-  $('folderStatus').textContent = 'questo browser non permette di scegliere la cartella: si usa Download predefinito';
-} else {
-  await showFolder();
-}
-
-$('pickFolder').addEventListener('click', async () => {
-  try {
-    await pickDir();
-    await showFolder();
-  } catch (e) {
-    $('folderStatus').className = 'status bad';
-    $('folderStatus').textContent = `errore: ${e.message}`;
-  }
-});
-
-$('forgetFolder').addEventListener('click', async () => {
-  await clearDir();
-  await showFolder();
-});
 
 $('concurrency').value = settings.concurrency;
 $('downloadFolder').value = settings.downloadFolder;

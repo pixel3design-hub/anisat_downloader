@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as site from '../sites/animesaturn.js';
 import { buildFeed, medianInterval } from '../lib/feed.js';
-import { splitPath } from '../lib/folder.js';
 
 const read = (f) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8');
 
@@ -118,13 +117,4 @@ test('feed: tutte le puntate + riga "in arrivo" disabilitata, tutto ASCII', () =
   // la puntata stimata (futura) sta in cima
   const titles = [...xml.matchAll(/<title>([^<]+)<\/title>/g)].map((m) => m[1]);
   assert.equal(titles[1], 'Reincarnated as a Sword 2 &#8212; Ep 9 (in arrivo)');
-});
-
-test('percorso cartella: sottocartelle e nome file', () => {
-  assert.deepEqual(splitPath('AnimeSaturn/Serie X/Serie X - Ep 01.mp4'), {
-    dirs: ['AnimeSaturn', 'Serie X'],
-    name: 'Serie X - Ep 01.mp4',
-  });
-  assert.deepEqual(splitPath('solo-file.mp4'), { dirs: [], name: 'solo-file.mp4' });
-  assert.deepEqual(splitPath('///'), { dirs: [], name: 'download.mp4' });
 });

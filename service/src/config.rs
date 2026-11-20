@@ -10,6 +10,7 @@ pub struct Config {
     pub bind: String,
     pub check_min: u32,
     pub version_check: bool,
+    pub download_dir: String,
 }
 
 impl Default for Config {
@@ -19,6 +20,7 @@ impl Default for Config {
             bind: crate::BIND_DEFAULT.to_string(),
             check_min: 30,
             version_check: true,
+            download_dir: crate::home_dir().join("Downloads").join("AniSatDownloader").display().to_string(),
         }
     }
 }
@@ -94,6 +96,14 @@ pub fn config_path(dir: &Path) -> PathBuf {
     dir.join("config.json")
 }
 
+/// "~/Downloads/x" -> "/home/utente/Downloads/x"
+pub fn expand_home(s: &str) -> String {
+    match s.strip_prefix("~/") {
+        Some(rest) => crate::home_dir().join(rest).display().to_string(),
+        None => s.to_string(),
+    }
+}
+
 impl Config {
     pub fn load(dir: &Path) -> Config {
         let mut cfg = Config::default();
@@ -128,6 +138,13 @@ impl Config {
                 changed = true;
             }
         }
+        if let Some(v) = str_field(json, "download_dir") {
+            let v = expand_home(v.trim());
+            if !v.is_empty() && v != self.download_dir {
+                self.download_dir = v;
+                changed = true;
+            }
+        }
         if let Some(v) = bool_field(json, "version_check") {
             if v != self.version_check {
                 self.version_check = v;
@@ -139,11 +156,12 @@ impl Config {
 
     pub fn to_json(&self) -> String {
         format!(
-            "{{\"name\":\"{}\",\"bind\":\"{}\",\"check_min\":{},\"version_check\":{}}}",
+            "{{\"name\":\"{}\",\"bind\":\"{}\",\"check_min\":{},\"version_check\":{},\"download_dir\":\"{}\"}}",
             escape(&self.name),
             escape(&self.bind),
             self.check_min,
-            self.version_check
+            self.version_check,
+            escape(&self.download_dir)
         )
     }
 

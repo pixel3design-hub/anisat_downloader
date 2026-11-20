@@ -12,6 +12,7 @@
 // Su Linux l'icona nella barra dei programmi (ksni/D-Bus) apre la configurazione.
 
 mod config;
+mod download;
 #[cfg(target_os = "linux")]
 mod tray;
 
@@ -58,6 +59,7 @@ struct App {
     cfg: Mutex<config::Config>,
     status: Mutex<Status>,
     restart: AtomicBool,
+    jobs: download::Jobs,
     #[cfg(target_os = "linux")]
     tray: OnceLock<ksni::blocking::Handle<tray::AniTray>>,
     #[cfg(target_os = "linux")]
@@ -71,6 +73,7 @@ impl App {
             cfg: Mutex::new(cfg),
             status: Mutex::new(Status::default()),
             restart: AtomicBool::new(false),
+            jobs: download::new_jobs(),
             #[cfg(target_os = "linux")]
             tray: OnceLock::new(),
             #[cfg(target_os = "linux")]
@@ -95,7 +98,7 @@ fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-fn home_dir() -> PathBuf {
+pub(crate) fn home_dir() -> PathBuf {
     env::var_os("HOME")
         .or_else(|| env::var_os("USERPROFILE"))
         .map(PathBuf::from)
@@ -327,6 +330,23 @@ fn handle(app: &App, method: &str, url: &str, body: Option<&str>) -> (u16, &'sta
             None => (400, "application/json; charset=utf-8", "{\"saved\":false,\"error\":\"corpo vuoto\"}".into()),
         },
         ("GET", "/status") => json_response(status_json(app)),
+        ("GET", "/jobs") => json_response(download::jobs_json(&app.jobs)),
+        ("POST", "/download") => match body {
+            None => (400, "application/json; charset=utf-8", "{\"started\":false,\"error\":\"corpo vuoto\"}".into()),
+            Some(b) => {
+                let id = config::str_field(b, "id").unwrap_or_else(|| format!("job-{}", now()));
+                match (config::str_field(b, "url"), config::str_field(b, "path")) {
+                    (Some(url), Some(path)) => {
+                        let dir = PathBuf::from(&app.cfg.lock().unwrap().download_dir);
+                        match download::start(app.jobs.clone(), id, url, path, dir) {
+                            Ok(started) => json_response(format!("{{\"started\":{started}}}")),
+                            Err(e) => (400, "application/json; charset=utf-8", format!("{{\"started\":false,\"error\":\"{}\"}}", config::escape(&e))),
+                        }
+                    }
+                    _ => (400, "application/json; charset=utf-8", "{\"started\":false,\"error\":\"servono url e path\"}".into()),
+                }
+            }
+        },
         ("GET", "/feed.xml") | ("GET", "/feed.rss") => match fs::read_to_string(app.feed_path()) {
             Ok(b) => (200, "application/rss+xml; charset=utf-8", b),
             Err(e) => (
@@ -351,7 +371,7 @@ fn handle(app: &App, method: &str, url: &str, body: Option<&str>) -> (u16, &'sta
         _ => (
             404,
             "text/plain; charset=utf-8",
-            "rotte: GET / (configurazione) · POST /feed · GET /feed.xml · GET /status · GET /health\n".to_string(),
+            "rotte: GET / (configurazione) · POST /feed · POST /download · GET /jobs · GET /feed.xml · GET /status · GET /health\n".to_string(),
         ),
     }
 }
