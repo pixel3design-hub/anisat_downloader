@@ -69,6 +69,17 @@ nav button {
 
 nav button.on { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
 
+nav button .badge { background: var(--ink); color: var(--bg); }
+nav button.on .badge { background: var(--brand-ink); color: var(--brand); }
+
+h2.sub {
+  margin: 14px 0 4px;
+  font-size: 11px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
 main { padding: 12px 14px 18px; }
 
 .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }

@@ -1,8 +1,9 @@
 import { api as webext } from './lib/api.js';
+import { calendarTs } from './sites/animesaturn.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let st = { series: {}, episodes: {}, seen: {}, queue: [], news: {}, settings: {}, feedState: {} };
+let st = { series: {}, episodes: {}, seen: {}, queue: [], news: {}, settings: {}, feedState: {}, account: null };
 
 if (new URLSearchParams(location.search).has('tab')) document.body.classList.add('tab');
 
@@ -203,6 +204,8 @@ function renderQueue() {
 function render() {
   renderSeries();
   renderQueue();
+  renderAccount();
+  renderOutings();
 }
 
 async function load() {
@@ -283,6 +286,136 @@ async function commitAdd(slugs) {
       await load();
       askServer(e.message);
       return;
+    }
+    toast(`Errore: ${e.message}`);
+  }
+}
+
+// --- profilo pubblico ---------------------------------------------------
+
+const dayMonth = (date) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ''));
+  return m ? `${m[3]}/${m[2]}` : '';
+};
+
+function renderAccount() {
+  const el = $('#accountState');
+  const cfg = String(st.settings.accountProfile || '').trim();
+  const a = st.account;
+  if (!cfg) {
+    el.textContent = 'Profilo AnimeSaturn: non configurato (impostalo in ⚙) — senza profilo restano solo ricerca e URL.';
+    return;
+  }
+  if (!a) {
+    el.textContent = `Profilo ${cfg}: mai importato. Premi “Importa profilo”.`;
+    return;
+  }
+  const when = a.at ? new Date(a.at).toLocaleString('it-IT') : '';
+  el.textContent = `Profilo ${a.name || a.id} · watchlist ${a.watchlist?.length || 0} · preferiti ${a.favorites?.length || 0}${a.truncated ? ' · lista troncata a 200 voci' : ''}${when ? ` · importato ${when}` : ''}`;
+}
+
+function renderOutings() {
+  const a = st.account || {};
+  const now = Date.now();
+  const future = [];
+  const past = [];
+  for (const e of a.calendar || []) {
+    if (!st.series[e.slug]) continue;
+    const ts = calendarTs(e);
+    if (!ts) continue;
+    (ts + 3 * 3600e3 >= now ? future : past).push({ ...e, ts });
+  }
+  future.sort((x, y) => x.ts - y.ts);
+  past.sort((x, y) => y.ts - x.ts);
+
+  const badge = $('#outingsBadge');
+  badge.textContent = future.length ? String(future.length) : '';
+  badge.hidden = !future.length;
+
+  const row = (e) => `<div class="q">
+      <div>${esc(e.title)} <small>Ep ${e.ep}</small><br>
+      <small>${esc(e.day || '')} ${dayMonth(e.date)}${e.time ? ` · ${esc(e.time)}` : ''}</small></div>
+    </div>`;
+
+  $('#calendarList').innerHTML = [...future, ...past].map(row).join('') ||
+    `<p class="hint">${a.id ? 'Nessuna puntata in calendario per le serie che segui: premi “Aggiorna uscite”.' : 'Importa il profilo per vedere le uscite della settimana.'}</p>`;
+
+  const recent = (a.recent || []).filter((x) => st.series[x.slug]);
+  $('#recentList').innerHTML = recent
+    .map((x) => `<div class="q">
+      <div>${esc(st.series[x.slug].title)} <small>Ep ${x.n}</small><br>
+      <small>${new Date(x.pubDate).toLocaleString('it-IT')}</small></div>
+    </div>`)
+    .join('') || '<p class="hint">Nessuna uscita recente registrata.</p>';
+
+  const at = a.calendarAt ? new Date(a.calendarAt).toLocaleString('it-IT') : 'mai';
+  $('#calendarState').textContent = `Calendario aggiornato: ${at} · si rinnova insieme all'aggiornamento dei preferiti.`;
+}
+
+// Modale "Dal profilo": serie da aggiungere ai preferiti locali.
+function openProfileModal(acc) {
+  const already = new Set(Object.keys(st.series));
+  const rows = [...(acc.watchlist || [])];
+  const inWl = new Set(rows.map((r) => r.slug));
+  for (const f of acc.favorites || []) {
+    if (!inWl.has(f.slug)) rows.push({ ...f, badge: 'Preferito', watched: 0, total: null });
+  }
+  const fresh = rows.filter((r) => !already.has(r.slug));
+
+  if (!fresh.length) {
+    toast('Tutte le serie del profilo sono già nei preferiti');
+    return;
+  }
+
+  const html = fresh
+    .map(
+      (r) => `<label class="season">
+        <input type="checkbox" value="${esc(r.slug)}" checked>
+        <span><strong>${esc(r.title)}</strong>${r.badge ? ` · ${esc(r.badge)}` : ''}<br>
+        <small>${r.total != null ? `Episodi ${r.watched || 0}/${r.total}` : 'Episodi non indicati'}${r.siteStatus ? ` · ${esc(r.siteStatus)}` : ''}</small></span>
+      </label>`,
+    )
+    .join('');
+
+  openModal(
+    `Dal profilo di ${acc.name || acc.id}`,
+    `<p class="hint">${fresh.length} serie da aggiungere ai preferiti. Quelle con episodi già visti vengono
+     segnate come viste (solo se non hai già segnato qualcosa a mano).</p>
+     <div id="profileList">${html}</div>`,
+    [
+      {
+        label: 'Aggiungi selezionate',
+        onClick: async () => {
+          const slugs = [...document.querySelectorAll('#profileList input:checked')].map((i) => i.value);
+          if (!slugs.length) return toast('Seleziona almeno una serie');
+          closeModal();
+          await commitProfile(slugs);
+        },
+      },
+      {
+        label: 'Tutte',
+        secondary: true,
+        onClick: async () => {
+          closeModal();
+          await commitProfile(fresh.map((r) => r.slug));
+        },
+      },
+      { label: 'Annulla', secondary: true, onClick: closeModal },
+    ],
+  );
+}
+
+async function commitProfile(slugs) {
+  toast(`Aggiungo ${slugs.length > 1 ? `${slugs.length} serie` : 'la serie'}…`);
+  try {
+    const { push } = await api('accountAdd', { slugs });
+    await load();
+    if (push?.serverDown) return askServer(push.error);
+    toast('Serie importate e feed inviato');
+  } catch (e) {
+    if (e.serverDown) {
+      await load();
+      return askServer(e.message);
     }
     toast(`Errore: ${e.message}`);
   }
@@ -389,6 +522,27 @@ document.addEventListener('click', async (ev) => {
         }
       case 'options':
         return webext.runtime.openOptionsPage();
+      case 'importProfile': {
+        toast('Leggo il profilo pubblico…');
+        let acc;
+        try {
+          acc = await api('accountImport');
+        } catch (e) {
+          return toast(`Errore: ${e.message}`);
+        }
+        await load();
+        openProfileModal(acc);
+        return;
+      }
+      case 'refreshCalendar':
+        toast('Aggiorno le uscite…');
+        try {
+          await api('calendarRefresh');
+        } catch (e) {
+          return toast(`Errore: ${e.message}`);
+        }
+        await load();
+        return toast('Uscite aggiornate');
       case 'expand':
         return webext.tabs.create({ url: webext.runtime.getURL('popup.html?tab=1') });
       case 'retry':

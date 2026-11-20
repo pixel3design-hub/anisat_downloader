@@ -12,6 +12,8 @@ const DEFAULTS = {
   refreshMin: 30,
   downloadFolder: 'AnimeSaturn',
   feedServer: 'http://127.0.0.1:8787',
+  accountProfile: '',
+  importWatched: true,
 };
 
 let lastFeedXml = null;
@@ -19,7 +21,7 @@ let lastFeedXml = null;
 // --- storage -------------------------------------------------------------
 
 async function store() {
-  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState', 'serviceOk']);
+  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState', 'serviceOk', 'account']);
   return {
     series: s.series || {},
     episodes: s.episodes || {},
@@ -29,6 +31,7 @@ async function store() {
     news: s.news || {},
     feedState: s.feedState || { ok: null, at: null, bytes: 0 },
     serviceOk: s.serviceOk ?? null,
+    account: s.account || null,
     settings: { ...DEFAULTS, ...(s.settings || {}) },
   };
 }
@@ -82,6 +85,84 @@ async function removeSeries(slug) {
   await pushFeed({ quiet: true });
 }
 
+// --- profilo pubblico (watchlist, preferiti, calendario) -----------------
+
+// Legge il profilo pubblico configurato e salva l'elenco. Solo su clic.
+async function accountImport({ input } = {}) {
+  const st = await store();
+  const id = site.profileId(input || st.settings.accountProfile);
+  if (!id) throw new Error('profilo non configurato: inserisci il tuo profilo AnimeSaturn nelle opzioni');
+  const p = await site.profile(id);
+  const account = {
+    ...(st.account || {}),
+    id,
+    name: p.name,
+    at: Date.now(),
+    favorites: p.favorites,
+    watchlist: p.watchlist,
+    counts: p.counts,
+    truncated: p.truncated,
+    calendar: st.account?.calendar || [],
+  };
+  await put({ account });
+  // il calendario serve subito: senza, il primo feed userebbe solo la stima
+  await calendarRefresh().catch(() => {});
+  return (await store()).account;
+}
+
+// Aggiunge ai preferiti le serie scelte (o tutte quelle del profilo).
+async function accountAdd({ slugs } = {}) {
+  const st = await store();
+  const rows = st.account?.watchlist || [];
+  const chosen = Array.isArray(slugs) && slugs.length ? slugs : rows.map((w) => w.slug);
+  if (!chosen.length) throw new Error('nessuna serie da aggiungere: importa prima il profilo');
+
+  const bySlug = new Map(rows.map((w) => [w.slug, w]));
+  const seen = { ...st.seen };
+  let added = 0;
+
+  for (const slug of chosen) {
+    const info = await refreshSeries(slug);
+    added++;
+    // il sito dà solo il conteggio dei visti: 1..watched, e solo se non hai già segni tuoi
+    const watched = bySlug.get(slug)?.watched || 0;
+    if (st.settings.importWatched && watched > 0 && !(seen[slug] || []).length) {
+      const upto = Math.min(watched, info?.airedEps || watched);
+      seen[slug] = Array.from({ length: upto }, (_, i) => i + 1);
+    }
+  }
+
+  await put({ seen });
+  const push = await pushFeed({ quiet: true });
+  return { added, push };
+}
+
+// Uscite della settimana + ultime uscite dal feed del sito, per le serie seguite.
+async function calendarRefresh() {
+  const st = await store();
+  if (!st.account?.id) throw new Error('profilo non configurato: importa prima il profilo');
+
+  const entries = await site.calendar();
+  const followed = new Set(Object.keys(st.series));
+  let recent = [];
+  try {
+    const feed = await site.episodesFeed();
+    recent = feed
+      .filter((x) => followed.has(x.slug))
+      .sort((a, b) => b.pubDate - a.pubDate)
+      .slice(0, 20)
+      .map((x) => ({ slug: x.slug, n: x.n, pubDate: x.pubDate, link: x.link }));
+  } catch {
+    // feed del sito irraggiungibile: restano le voci precedenti
+    recent = st.account.recent || [];
+  }
+
+  const account = { ...st.account, calendar: entries, calendarAt: Date.now(), recent };
+  await put({ account });
+  await pushFeed({ quiet: true });
+  return account;
+}
+
 // --- polling RSS --------------------------------------------------------
 
 async function poll() {
@@ -125,6 +206,9 @@ async function poll() {
     }
   }
 
+  // il calendario si rinnova allo stesso giro dei preferiti (niente timer nuovi)
+  if (st.account?.id) await calendarRefresh().catch(() => {});
+
   await pushFeed({ quiet: true });
   await updateBadge();
   return { updated };
@@ -155,7 +239,16 @@ async function feedXml(st) {
   if (!catalog.length) return null;
   const needsUpcoming = catalog.some((s) => !s.airedEps);
   const upcoming = needsUpcoming ? await site.upcoming().catch(() => ({})) : {};
-  return buildFeed({ catalog, upcoming });
+
+  // orari reali del calendario, quando la serie c'è
+  const calendar = {};
+  for (const e of st.account?.calendar || []) {
+    const ts = site.calendarTs(e);
+    if (!ts) continue;
+    (calendar[e.slug] ||= []).push({ n: e.ep, ts });
+  }
+
+  return buildFeed({ catalog, upcoming, calendar });
 }
 
 // Invia il feed al servizio anisat-feed, che lo salva in ~/.anisatrss/feed.rss.
@@ -389,6 +482,10 @@ const handlers = {
     return Promise.all(Object.keys(st.series).map(refreshSeries));
   },
   poll: () => poll(),
+  accountCheck: ({ input } = {}) => site.profile(input),
+  accountImport: (msg) => accountImport(msg),
+  accountAdd: (msg) => accountAdd(msg),
+  calendarRefresh: () => calendarRefresh(),
   download: ({ slug, ns }) => enqueue(slug, ns),
   retry: async ({ slug, n }) => {
     const st = await store();

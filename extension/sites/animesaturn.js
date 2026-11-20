@@ -154,7 +154,7 @@ export async function resolveStream(url) {
 export async function upcoming() {
   const html = await get(`${SITE}/upcoming`);
   const out = {};
-  for (const m of html.matchAll(/<a href="\/anime\/([^"?]+)" class="ac group">([\s\S]*?)<\/a>/g)) {
+  for (const m of html.matchAll(/<a href="\/anime\/([^"?]+)" class="ac[^"]*">([\s\S]*?)<\/a>/g)) {
     const ts = parseItDate(firstMatch(/ac__sub">([^<·]+)/, m[2]) || '');
     if (ts) out[m[1]] = ts;
   }
@@ -199,7 +199,7 @@ export async function related(url) {
   if (!slug) throw new Error('URL serie non riconosciuta');
   const html = await get(`${SITE}/related/${slug}`);
   const out = [];
-  for (const m of html.matchAll(/<a href="\/anime\/([^"]+)" class="ac group">([\s\S]*?)<\/a>/g)) {
+  for (const m of html.matchAll(/<a href="\/anime\/([^"]+)" class="ac[^"]*">([\s\S]*?)<\/a>/g)) {
     const title = decodeEntities(firstMatch(/ac__title">([^<]+)</, m[2]) || '').trim();
     if (!title) continue;
     const sub = firstMatch(/ac__sub">([^<]*)/, m[2]) || '';
@@ -250,6 +250,183 @@ export async function seasons(url) {
       status: f.status || '',
     };
   });
+}
+
+// --- profilo pubblico (nessun login) -----------------------------------
+
+// "286", "https://www.animesaturn.net/profile/286", "/profile/286/watchlist" -> "286"
+export function profileId(input) {
+  const s = String(input ?? '').trim();
+  const m = /(?:^|\/)profile\/(\d+)/.exec(s) || /^(\d+)$/.exec(s);
+  return m ? String(Number(m[1])) : null;
+}
+
+// Pagina pubblica: niente cookie, altrimenti un profilo privato sembrerebbe nostro.
+async function publicPage(url) {
+  const r = await fetch(url, { credentials: 'omit', cache: 'no-store' });
+  if (r.status === 404) throw new Error('profilo non trovato (404)');
+  if (r.status === 401 || r.status === 403) throw new Error('profilo non pubblico');
+  if (!r.ok) throw new Error(`HTTP ${r.status} su ${url}`);
+  return r.text();
+}
+
+// tetto di sicurezza: se in futuro le liste vengono paginate non si tronca in silenzio
+export const LIST_CAP = 200;
+
+// Panoramica del profilo: nome, contatori watchlist, rail dei preferiti.
+export function parseProfile(html) {
+  const h = String(html);
+  const name = decodeEntities(firstMatch(/user-profile__name">([^<]+)</, h) || '').trim();
+
+  const counts = { watching: 0, planned: 0, completed: 0, paused: 0, dropped: 0 };
+  const reCount = /wl-summary__dot wl-tone-(\w+)"><\/span>\s*<span class="wl-summary__label">[^<]*<\/span>\s*<strong class="wl-summary__count">(\d+)/g;
+  for (const m of h.matchAll(reCount)) {
+    if (m[1] in counts) counts[m[1]] = Number(m[2]);
+  }
+
+  // solo la sezione "Preferiti": la pagina ha altri rail (attività) con le stesse card
+  const favAt = h.search(/id="profile-favorites"/);
+  const favHtml = favAt < 0 ? '' : h.slice(favAt).split('</section>')[0];
+  const favorites = [];
+  for (const m of favHtml.matchAll(/<a href="\/anime\/([^"]+)" class="ac[^"]*">([\s\S]*?)<\/a>/g)) {
+    const title = decodeEntities(firstMatch(/ac__title">([^<]+)</, m[2]) || '').trim();
+    if (!title) continue;
+    favorites.push({
+      slug: m[1],
+      title,
+      url: seriesUrl(m[1]),
+      poster: firstMatch(/<img src="([^"]+)"/, m[2]) || '',
+    });
+  }
+
+  return { name, counts, favorites };
+}
+
+// Righe della watchlist: stato, progresso "Episodi 15/24", tipo/anno/stato del sito.
+// La classe si matcha per prefisso: il sito aggiunge già modificatori altrove
+// ("cal-day ", "cal-entry--pause"), quindi "wl-row" non è mai l'unica classe.
+export function parseWatchlist(html) {
+  const rows = [];
+  for (const m of String(html).matchAll(/<li class="wl-row[^"]*">([\s\S]*?)<\/li>/g)) {
+    const b = m[1];
+    const slug = firstMatch(/href="\/anime\/([^"]+)"/, b);
+    const title = decodeEntities(firstMatch(/wl-row__title">([^<]+)</, b) || '').trim();
+    if (!slug || !title) continue;
+    const meta = (firstMatch(/wl-row__meta">([^<]*)</, b) || '')
+      .split(/\s*(?:&middot;|\u00b7)\s*/)
+      .map((x) => decodeEntities(x).trim())
+      .filter(Boolean);
+    const progress = /Episodi\s*<strong>(\d+)\s*\/\s*(\d+)<\/strong>/.exec(b);
+    rows.push({
+      slug,
+      title,
+      url: seriesUrl(slug),
+      poster: firstMatch(/<img src="([^"]+)"/, b) || '',
+      type: meta[0] || '',
+      year: Number(meta[1]) || null,
+      siteStatus: meta[2] || '',
+      badge: decodeEntities(firstMatch(/wl-badge wl-tone-\w+">[\s\S]*?<span>([^<]+)<\/span>/, b) || '').trim(),
+      watched: progress ? Number(progress[1]) : 0,
+      total: progress ? Number(progress[2]) : null,
+    });
+  }
+  return { rows: rows.slice(0, LIST_CAP), truncated: rows.length > LIST_CAP };
+}
+
+// Panoramica + dettaglio watchlist in due GET pubbliche.
+export async function profile(input) {
+  const id = profileId(input);
+  if (!id) throw new Error(`profilo non valido: ${input}`);
+  const [overview, list] = await Promise.all([
+    publicPage(`${SITE}/profile/${id}`),
+    publicPage(`${SITE}/profile/${id}/watchlist`),
+  ]);
+  const meta = parseProfile(overview);
+  const wl = parseWatchlist(list);
+  // i contatori e le righe vengono da due pagine: se i contatori dicono che c'è roba
+  // e le righe non si leggono, il markup è cambiato. Meglio un errore che un profilo "vuoto".
+  const declared = Object.values(meta.counts).reduce((a, b) => a + b, 0);
+  if (declared > 0 && !wl.rows.length) {
+    throw new Error(`watchlist non letta: il profilo dichiara ${declared} serie (markup del sito cambiato?)`);
+  }
+  return { id, ...meta, watchlist: wl.rows, truncated: wl.truncated };
+}
+
+// --- calendario settimanale --------------------------------------------
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// Il calendario non scrive l'anno: si ricava dalla settimana precedente linkata
+// ("?week=2026-11-09" -> settimana corrente dal 16/11/2026).
+export function calendarYear(html) {
+  const m = /[?&]week=(\d{4})-(\d{2})-(\d{2})/.exec(String(html));
+  if (!m) return new Date().getFullYear();
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 7));
+  return d.getUTCFullYear();
+}
+
+// [{ slug, title, poster, ep, day, date:'YYYY-MM-DD', time:'HH:MM' }]
+export function parseCalendar(html, year = calendarYear(html)) {
+  const out = [];
+  for (const day of String(html).matchAll(/<article class="cal-day[^"]*">([\s\S]*?)<\/article>/g)) {
+    const b = day[1];
+    const dayName = decodeEntities(firstMatch(/cal-day__name">([^<]+)</, b) || '').trim();
+    const num = Number(firstMatch(/cal-day__num">(\d+)</, b));
+    const month = MONTHS[(firstMatch(/cal-day__month">([^<]+)</, b) || '').trim().toLowerCase()];
+    const date = num >= 1 && num <= 31 && month !== undefined ? `${year}-${pad2(month + 1)}-${pad2(num)}` : null;
+
+    for (const e of b.matchAll(/<a href="\/anime\/([^"]+)" class="cal-entry[^"]*">([\s\S]*?)<\/a>/g)) {
+      const body = e[2];
+      const title = decodeEntities(firstMatch(/cal-entry__name">([^<]+)</, body) || '').trim();
+      if (!title) continue;
+      const ep = Number(firstMatch(/cal-entry__ep">Ep\.\s*(\d+)/, body));
+      if (!ep) continue; // "In pausa": nessuna puntata da annunciare
+      const timeHtml = firstMatch(/cal-entry__time">([\s\S]*?)<\/span>/, body) || '';
+      const time = firstMatch(/(\d{1,2}:\d{2})/, timeHtml.replace(/<[^>]+>/g, ' ')) || '';
+      out.push({
+        slug: e[1],
+        title,
+        poster: firstMatch(/<img src="([^"]+)"/, body) || '',
+        ep,
+        day: dayName,
+        date,
+        time,
+      });
+    }
+  }
+  return out;
+}
+
+// Uscite della settimana in corso + la successiva (il link "?week=" della pagina la espone),
+// così l'orario reale copre anche la prossima puntata delle serie che escono a inizio settimana.
+export async function calendar() {
+  const html = await publicPage(`${SITE}/calendar`);
+  const out = parseCalendar(html);
+  const declared = Number(firstMatch(/cal-filter__count">(\d+)</, html) || 0);
+  if (declared > 0 && !out.length) {
+    throw new Error(`calendario non letto: il sito dichiara ${declared} uscite (markup cambiato?)`);
+  }
+
+  const at = html.indexOf('aria-label="Settimana successiva"');
+  const next = at < 0
+    ? null
+    : [...html.slice(Math.max(0, at - 300), at).matchAll(/\/calendar\?week=(\d{4}-\d{2}-\d{2})/g)].at(-1);
+  if (next) {
+    const more = await publicPage(`${SITE}/calendar?week=${next[1]}`).catch(() => '');
+    for (const e of more ? parseCalendar(more) : []) {
+      if (!out.some((x) => x.slug === e.slug && x.date === e.date && x.ep === e.ep)) out.push(e);
+    }
+  }
+  return out;
+}
+
+// { date:'2026-11-16', time:'14:00' } -> epoch ms nel fuso locale
+export function calendarTs(entry) {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(entry?.date || ''));
+  if (!d) return null;
+  const t = /^(\d{1,2}):(\d{2})$/.exec(String(entry?.time || ''));
+  const ts = new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3]), t ? Number(t[1]) : 0, t ? Number(t[2]) : 0).getTime();
+  return Number.isNaN(ts) ? null : ts;
 }
 
 // --- feed globale episodi ----------------------------------------------

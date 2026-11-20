@@ -58,7 +58,9 @@ function item({ title, link, guid, pubDate, description, image, category }) {
 
 // catalog: [{ slug, title, poster, airedEps, totalEps, lastRelease, cadence:[ms], episodes:[{n}] }]
 // upcoming: { slug: ms } per le serie non ancora iniziate
-export function buildFeed({ catalog = [], upcoming = {}, now = Date.now() } = {}) {
+// calendar: { slug: [{ n, ts }] } orari reali del calendario del sito
+// La prossima puntata usa l'orario del calendario quando c'è, altrimenti la stima.
+export function buildFeed({ catalog = [], upcoming = {}, calendar = {}, now = Date.now() } = {}) {
   const items = [];
 
   for (const s of catalog) {
@@ -90,7 +92,8 @@ export function buildFeed({ catalog = [], upcoming = {}, now = Date.now() } = {}
 
     if (s.totalEps > aired) {
       const n = aired + 1;
-      const nextTs = upcoming[s.slug] || last + interval;
+      const fromCalendar = (calendar[s.slug] || []).find((c) => c.n === n && c.ts > now - 24 * 3600e3);
+      const nextTs = fromCalendar?.ts || upcoming[s.slug] || last + interval;
       items.push({
         pubDate: nextTs,
         xml: item({
@@ -100,8 +103,10 @@ export function buildFeed({ catalog = [], upcoming = {}, now = Date.now() } = {}
           pubDate: nextTs,
           category: 'in-arrivo',
           description:
-            `Non ancora disponibile: previsto ${fmtDate(nextTs)} (${fmtRemaining(nextTs - now)}). ` +
-            `Stima basata su ${s.cadence?.length > 1 ? `intervallo osservato di ${Math.round(interval / 864e5)}g` : 'cadenza settimanale'}. ` +
+            `Non ancora disponibile: ${fromCalendar ? 'in uscita da calendario' : 'previsto'} ${fmtDate(nextTs)} (${fmtRemaining(nextTs - now)}). ` +
+            (fromCalendar
+              ? 'Orario pubblicato nel calendario del sito. '
+              : `Stima basata su ${s.cadence?.length > 1 ? `intervallo osservato di ${Math.round(interval / 864e5)}g` : 'cadenza settimanale'}. `) +
             `${aired}/${s.totalEps} usciti.`,
           image: s.poster,
         }),

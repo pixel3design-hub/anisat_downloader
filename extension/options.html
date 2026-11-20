@@ -75,6 +75,23 @@
     </section>
 
     <section>
+      <h2>Profilo AnimeSaturn</h2>
+      <label>Profilo pubblico <input id="accountProfile" type="text" placeholder="286 oppure https://www.animesaturn.net/profile/286" /></label>
+      <div class="row">
+        <button id="checkProfile" class="secondary">Verifica</button>
+        <span id="profileStatus" class="status">non verificato</span>
+      </div>
+      <label>Importa gli episodi già visti <input id="importWatched" type="checkbox" /></label>
+      <p class="hint">
+        Serve solo l'URL del tuo profilo pubblico (nessuna password): da lì il pulsante
+        <strong>Importa profilo</strong> del popup propone watchlist e preferiti, e
+        <strong>Uscite</strong> mostra le puntate della settimana con l'orario del calendario.
+        Il sito non elenca i singoli episodi visti, solo un conteggio: l'import segna 1..N e
+        non tocca le serie in cui hai già segnato qualcosa a mano.
+      </p>
+    </section>
+
+    <section>
       <h2>Servizio anisat-feed</h2>
       <p class="hint">Eseguibile per Windows, Linux e macOS:</p>
       <ul>

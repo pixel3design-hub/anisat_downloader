@@ -11,6 +11,7 @@
       <nav>
         <button data-tab="series" class="on">Serie</button>
         <button data-tab="search">Cerca</button>
+        <button data-tab="outings">Uscite<span class="badge" id="outingsBadge" hidden></span></button>
         <button data-tab="queue">Coda</button>
       </nav>
       <div class="tools">
@@ -21,6 +22,11 @@
 
     <main>
       <section data-panel="series">
+        <p class="hint" id="accountState"></p>
+        <div class="row">
+          <button data-act="importProfile">Importa profilo</button>
+          <button data-act="refreshCalendar">Aggiorna uscite</button>
+        </div>
         <div class="row">
           <button data-act="refreshAll">Aggiorna tutte</button>
           <button data-act="openFeed">Apri feed</button>
@@ -50,6 +56,14 @@
         </div>
         <div id="queueList"></div>
       </section>
+      <section data-panel="outings" hidden>
+        <p class="hint" id="calendarState"></p>
+        <h2 class="sub">Puntate della settimana</h2>
+        <div id="calendarList"></div>
+        <h2 class="sub">Ultime uscite</h2>
+        <div id="recentList"></div>
+      </section>
+
     </main>
 
     <div id="modal" hidden>
