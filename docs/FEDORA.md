@@ -71,10 +71,44 @@ Il repository punta a una cartella locale (`baseurl=file://...`), quindi gli agg
 solo dopo che i nuovi `.rpm` sono in quella cartella: rilancia `setup-local-repo.sh --fetch` quando
 esce una release. Lo script usa `createrepo_c`; se manca, prova con un container podman.
 
-## COPR (per avere il repository ufficiale)
+## COPR (repository vero, con `dnf search` e aggiornamenti)
 
-Mozilla non c'entra, COPR è il servizio Fedora per repository personali: con un account su
-<https://copr.fedorainfracloud.org> si pubblica un repository `dnf copr enable <utente>/anisat` e
-`dnf search`/`upgrade` funzionano come per qualsiasi pacchetto Fedora. Non è ancora configurato qui:
-richiede un account e un `.spec` che compili dai sorgenti, oppure (più semplice per un binario già
-pronto) un pacchetto che installi l'eseguibile della release. Se serve, è il passo successivo.
+COPR è il servizio Fedora per repository personali: una volta pubblicato lì, i pacchetti si installano
+e si aggiornano come qualsiasi altro pacchetto Fedora.
+
+`packaging/copr/anisat-feed.spec` impacchetta i binari della release (x86_64 e aarch64) invece di
+ricompilare: le dipendenze Rust in `cargo vendor` occupano 176 MB, di cui 91 MB di crate Windows
+richiesti comunque dal lock, e i build COPR girano senza rete.
+
+### Pubblicare
+
+```bash
+# 1. costruisce l'SRPM scaricando i tarball della release (usa rpmbuild o un container podman)
+./packaging/copr/make-srpm.sh v0.6.0
+
+# 2. una volta solo: crea il progetto su COPR (account su copr.fedorainfracloud.org)
+copr-cli create anisat-feed \
+  --chroots fedora-43-x86_64 fedora-43-aarch64 fedora-42-x86_64 fedora-42-aarch64 fedora-rawhide-x86_64
+
+# 3. carica il build
+copr-cli build anisat-feed dist/copr/SRPMS/anisat-feed-0.6.0-1.fc44.src.rpm
+```
+
+L'API key per `copr-cli` si prende da <https://copr.fedorainfracloud.org/api/> e si salva in
+`~/.config/copr`. In alternativa si carica l'SRPM a mano dall'interfaccia web (*New Build*), senza
+installare nulla.
+
+### Per gli utenti
+
+```bash
+sudo dnf copr enable <tuo-utente>/anisat-feed
+sudo dnf install anisat-feed
+sudo dnf upgrade anisat-feed     # gli aggiornamenti arrivano con ricaricare il progetto su COPR
+```
+
+### Verifiche fatte
+
+Lo spec è stato provato qui costruendo SRPM e RPM veri in un container Fedora: contenuto del pacchetto
+(`/usr/bin/anisat-feed`, `.desktop`, metainfo AppStream, icona, licenza, README) e build
+`--target aarch64` funzionanti. Quello che non posso provare da qui è il build dentro le chroot di
+COPR: se qualcosa non torna, l'errore compare nel log del build sul sito.

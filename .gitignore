@@ -27,3 +27,6 @@ pkg/
 
 # cache generata da Firefox quando installa l'estensione
 _metadata/
+
+# dipendenze vendored per il packaging (generate, non versionate)
+service/vendor/
