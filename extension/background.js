@@ -21,7 +21,7 @@ let lastFeedXml = null;
 // --- storage -------------------------------------------------------------
 
 async function store() {
-  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState', 'serviceOk', 'account', 'credentials']);
+  const s = await webext.storage.local.get(['series', 'episodes', 'seen', 'cadence', 'queue', 'settings', 'news', 'feedState', 'serviceOk', 'account', 'credentials', 'families']);
   return {
     series: s.series || {},
     episodes: s.episodes || {},
@@ -33,6 +33,7 @@ async function store() {
     serviceOk: s.serviceOk ?? null,
     account: s.account || null,
     credentials: s.credentials || null,
+    families: s.families || null,
     settings: { ...DEFAULTS, ...(s.settings || {}) },
   };
 }
@@ -59,7 +60,7 @@ export async function refreshSeries(slug) {
   }
   st.news[slug] = 0;
 
-  await put({ series: st.series, episodes: st.episodes, cadence: st.cadence, news: st.news });
+  await put({ series: st.series, episodes: st.episodes, cadence: st.cadence, news: st.news, families: null });
   return st.series[slug];
 }
 
@@ -82,7 +83,7 @@ async function removeSeries(slug) {
   delete st.cadence[slug];
   delete st.news[slug];
   st.queue = st.queue.filter((q) => q.slug !== slug);
-  await put({ series: st.series, episodes: st.episodes, seen: st.seen, cadence: st.cadence, news: st.news, queue: st.queue });
+  await put({ series: st.series, episodes: st.episodes, seen: st.seen, cadence: st.cadence, news: st.news, queue: st.queue, families: null });
   await pushFeed({ quiet: true });
 }
 
@@ -123,15 +124,62 @@ async function accountImport({ input } = {}) {
   return (await store()).account;
 }
 
-// --- preferiti locali (cuore) -------------------------------------------
+// --- famiglie (stagioni della stessa serie) ------------------------------
 
-async function likeSeries({ slug, value }) {
+const FAMILY_TTL = 7 * 864e5;
+
+// Quali serie appartengono alla stessa famiglia, secondo i "correlati" del sito:
+// una richiesta per serie, cache di una settimana, invalidata quando la lista cambia.
+async function refreshFamilies({ force } = {}) {
   const st = await store();
-  if (!st.series[slug]) throw new Error('serie non trovata');
-  st.series[slug] = { ...st.series[slug], favorite: Boolean(value) };
-  await put({ series: st.series });
-  const push = await pushFeed({ quiet: true });
-  return { slug, favorite: st.series[slug].favorite, push };
+  const fresh = st.families && !force && Date.now() - (st.families.at || 0) < FAMILY_TTL;
+  if (fresh) return st.families;
+
+  const list = Object.values(st.series);
+  if (!list.length) {
+    const empty = { at: Date.now(), groups: [] };
+    await put({ families: empty });
+    return empty;
+  }
+
+  const local = new Set(list.map((s) => s.slug));
+  const adj = new Map(list.map((s) => [s.slug, new Set()]));
+  for (const s of list) {
+    let rel = [];
+    try {
+      rel = await site.related(s.url || site.seriesUrl(s.slug));
+    } catch {
+      continue; // serie con la pagina dei correlati giù: resta da sola
+    }
+    for (const r of rel) {
+      if (r.slug === s.slug || !local.has(r.slug)) continue;
+      adj.get(s.slug).add(r.slug);
+      adj.get(r.slug).add(s.slug);
+    }
+  }
+
+  const seen = new Set();
+  const groups = [];
+  for (const s of list) {
+    if (seen.has(s.slug)) continue;
+    const stack = [s.slug];
+    const members = [];
+    while (stack.length) {
+      const cur = stack.pop();
+      if (seen.has(cur)) continue;
+      seen.add(cur);
+      members.push(cur);
+      for (const n of adj.get(cur) || []) if (!seen.has(n)) stack.push(n);
+    }
+    if (members.length < 2) continue;
+    members.sort();
+    const title = members.map((m) => st.series[m]?.title || m).sort((a, b) => a.length - b.length)[0];
+    groups.push({ key: members.join('|'), title, slugs: members });
+  }
+
+  const families = { at: Date.now(), groups };
+  await put({ families });
+  return families;
 }
 
 // --- stagioni mancanti ---------------------------------------------------
@@ -194,7 +242,7 @@ async function accountAdd({ slugs } = {}) {
     }
   }
 
-  await put({ seen, series });
+  await put({ seen, series, families: null });
   const push = await pushFeed({ quiet: true });
   return { added, push };
 }
@@ -552,7 +600,7 @@ const handlers = {
   accountImport: (msg) => accountImport(msg),
   accountAdd: (msg) => accountAdd(msg),
   calendarRefresh: () => calendarRefresh(),
-  like: (msg) => likeSeries(msg),
+  families: (msg) => refreshFamilies(msg),
   seasonSuggestions: () => seasonSuggestions(),
   peek: ({ input } = {}) => site.profile(input),
   login: async ({ user, password } = {}) => {

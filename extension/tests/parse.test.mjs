@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as site from '../sites/animesaturn.js';
 import { buildFeed, medianInterval } from '../lib/feed.js';
-import { groupSeries, missingSeasons, statusKey } from '../lib/group.js';
+import { buildView, missingSeasons, statusKey, statusSections } from '../lib/group.js';
 
 const read = (f) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8');
 
@@ -153,12 +153,12 @@ test('sezioni: ogni serie finisce nello stato della sua watchlist', () => {
   assert.equal(statusKey('boh'), 'none');
   assert.equal(statusKey(''), 'none');
 
-  const sections = groupSeries([
+  const sections = statusSections([
+    { slug: 'b1', title: 'Tokyo Revengers', listStatus: 'Da guardare' },
+    { slug: 'c1', title: 'Serie Finita', listStatus: 'Completato' },
+    { slug: 'd1', title: 'Serie Mollata', listStatus: 'Droppato' },
     { slug: 'a1', title: 'Mob Psycho 100', listStatus: 'In corso' },
     { slug: 'a2', title: 'Mob Psycho 100 2', listStatus: 'In corso' },
-    { slug: 'b1', title: 'Tokyo Revengers', listStatus: 'Da guardare' },
-    { slug: 'c1', title: 'Serie Finita', listStatus: 'Completati' },
-    { slug: 'd1', title: 'Serie Mollata', listStatus: 'Droppati' },
     { slug: 'e1', title: 'Aggiunta a mano' },
   ]);
 
@@ -169,9 +169,28 @@ test('sezioni: ogni serie finisce nello stato della sua watchlist', () => {
     ['dropped', 1],
     ['none', 1],
   ]);
-  // le due stagioni della stessa serie restano nella stessa famiglia, in ordine
-  assert.equal(sections[0].families.length, 1);
-  assert.deepEqual(sections[0].families[0].seasons.map((s) => s.season), [1, 2]);
+  assert.deepEqual(sections[0].series.map((s) => s.slug), ['a1', 'a2']);
+});
+
+test('famiglie: le stagioni vanno in tendina e non si duplicano nelle sezioni', () => {
+  const list = [
+    { slug: 'tougen', title: 'Tougen Anki', listStatus: 'Completato' },
+    { slug: 'tougen-arc', title: 'Tougen Anki: Nikko Kegon Falls Arc', listStatus: 'In corso' },
+    { slug: 'tokyo', title: 'Tokyo Revengers', listStatus: 'In corso' },
+  ];
+  // la famiglia viene dai correlati del sito: i titoli non c'entrano
+  const families = [{ key: 'tougen|tougen-arc', title: 'Tougen Anki', slugs: ['tougen', 'tougen-arc'] }];
+
+  const view = buildView(list, families);
+  assert.equal(view.multi.length, 1);
+  assert.deepEqual(view.multi[0].series.map((s) => s.slug), ['tougen', 'tougen-arc']);
+  // l'unica serie fuori famiglia resta nella sua sezione
+  assert.deepEqual(view.sections.map((s) => [s.key, s.series.map((x) => x.slug)]), [['watching', ['tokyo']]]);
+
+  // famiglia con una sola stagione in lista: niente tendina, torna nella sezione
+  const solo = buildView(list, [{ key: 'k', title: 'Tougen Anki', slugs: ['tougen'] }]);
+  assert.equal(solo.multi.length, 0);
+  assert.deepEqual(solo.sections.flatMap((s) => s.series.map((x) => x.slug)).sort(), ['tokyo', 'tougen', 'tougen-arc'].sort());
 });
 
 test('stagioni mancanti: solo quelle non già nei preferiti', () => {

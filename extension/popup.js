@@ -1,10 +1,10 @@
 import { api as webext } from './lib/api.js';
-import { groupSeries } from './lib/group.js';
+import { buildView } from './lib/group.js';
 import { calendarTs } from './sites/animesaturn.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
 
-let st = { series: {}, episodes: {}, seen: {}, queue: [], news: {}, settings: {}, feedState: {}, account: null, hasLogin: false };
+let st = { series: {}, episodes: {}, seen: {}, queue: [], news: {}, settings: {}, feedState: {}, account: null, families: null, hasLogin: false };
 
 if (new URLSearchParams(location.search).has('tab')) document.body.classList.add('tab');
 
@@ -116,11 +116,16 @@ function askServer(error) {
 
 const open = new Set();
 
+// i preferiti sono quelli marcati sul sito: il cuore è un indicatore, non un interruttore
+const siteFavorites = () => new Set((st.account?.favorites || []).map((f) => f.slug));
+
 function seriesCard(s) {
   const news = st.news[s.slug] || 0;
-  const fav = s.favorite !== false;
+  const heart = siteFavorites().has(s.slug)
+    ? '<span class="heart on" title="Fra i preferiti del tuo profilo AnimeSaturn">♥</span>'
+    : '';
   const el = document.createElement('article');
-  el.className = `card ${fav ? '' : 'unliked'}`;
+  el.className = 'card';
   el.dataset.slug = s.slug;
   el.innerHTML = `
     <img src="${esc(s.poster)}" alt="" loading="lazy">
@@ -128,8 +133,7 @@ function seriesCard(s) {
       <h3>${esc(s.title)}${news ? `<span class="badge">${news}</span>` : ''}</h3>
       <p>${s.airedEps}/${s.totalEps} episodi · ${esc(s.status || '')}${s.listStatus && s.listStatus !== s.status ? ` · ${esc(s.listStatus)}` : ''}</p>
     </div>
-    <button class="heart ${fav ? 'on' : ''}" data-act="like" data-slug="${esc(s.slug)}" data-value="${fav ? 0 : 1}"
-      title="${fav ? 'Nei preferiti: togli dal feed' : 'Non nei preferiti: aggiungi al feed'}">♥</button>
+    ${heart}
     <div class="actions">
       <button data-act="toggle" data-slug="${esc(s.slug)}">Episodi</button>
       <button data-act="new" data-slug="${esc(s.slug)}">Scarica nuovi</button>
@@ -140,27 +144,40 @@ function seriesCard(s) {
   return el;
 }
 
+function groupHeading(text) {
+  const head = document.createElement('h2');
+  head.className = 'group';
+  head.textContent = text;
+  return head;
+}
+
+// Famiglie con più stagioni: una tendina per famiglia, stagioni dentro.
+function familyBlock(fam) {
+  const details = document.createElement('details');
+  details.className = 'fam';
+  details.dataset.family = fam.key;
+  const summary = document.createElement('summary');
+  const seasons = [...new Set(fam.series.map((s) => s.season || 1))].sort((a, b) => a - b);
+  summary.innerHTML = `<span>${esc(fam.title)}</span>
+    <small>${fam.series.length} stagioni${seasons.length > 1 ? ` · S${seasons[0]}–S${seasons.at(-1)}` : ''}</small>`;
+  details.appendChild(summary);
+  for (const s of fam.series) details.appendChild(seriesCard(s));
+  return details;
+}
+
 function renderSeries() {
   const list = Object.values(st.series);
   const box = $('#seriesList');
+  const view = buildView(list, st.families?.groups || []);
 
-  // una sezione per stato della watchlist, con le stagioni della stessa serie vicine
   const nodes = [];
-  for (const section of groupSeries(list)) {
-    const head = document.createElement('h2');
-    head.className = 'group';
-    head.textContent = `${section.label} (${section.count})`;
-    head.dataset.group = section.key;
-    nodes.push(head);
-    for (const fam of section.families) {
-      if (fam.seasons.length > 1) {
-        const label = document.createElement('p');
-        label.className = 'family';
-        label.textContent = `${fam.title} · ${fam.seasons.length} stagioni`;
-        nodes.push(label);
-      }
-      nodes.push(...fam.seasons.map(seriesCard));
-    }
+  if (view.multi.length) {
+    nodes.push(groupHeading(`Serie con più stagioni (${view.multi.length})`));
+    nodes.push(...view.multi.map(familyBlock));
+  }
+  for (const section of view.sections) {
+    nodes.push(groupHeading(`${section.label} (${section.count})`));
+    nodes.push(...section.series.map(seriesCard));
   }
   box.replaceChildren(...nodes);
   $('#emptyHint').hidden = list.length > 0;
@@ -234,6 +251,18 @@ function render() {
 async function load() {
   st = await api('state');
   render();
+  // le famiglie (correlati del sito) mancano dopo un'aggiunta o una rimozione:
+  // una volta per apertura, poi si ridisegna
+  if (Object.keys(st.series).length && !st.families && !load.familiesAsked) {
+    load.familiesAsked = true;
+    try {
+      await api('families');
+      st = await api('state');
+      render();
+    } catch {
+      // senza correlati restano le sezioni per stato
+    }
+  }
 }
 
 // --- aggiunta serie (scelta stagioni) -----------------------------------
@@ -621,10 +650,6 @@ document.addEventListener('click', async (ev) => {
         if (!groups.length) return toast('Nessuna stagione mancante trovata');
         return openSeasonModal(groups);
       }
-      case 'like':
-        await api('like', { slug, value: btn.dataset.value === '1' });
-        await load();
-        return toast(btn.dataset.value === '1' ? 'Aggiunta ai preferiti' : 'Tolta dai preferiti');
       case 'openFeed':
         return webext.tabs.create({ url: 'http://127.0.0.1:8787/feed.xml' });
       case 'pushFeed':

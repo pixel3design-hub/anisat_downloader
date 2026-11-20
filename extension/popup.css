@@ -105,25 +105,45 @@ h2.group {
   color: var(--mute);
 }
 
-p.family {
-  margin: 10px 0 4px;
-  font-size: 12px;
-  color: var(--mute);
+/* famiglia di stagioni: tendina chiusa di default */
+details.fam {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
 }
 
-/* cuore dei preferiti: acceso = nel feed */
+details.fam > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  cursor: pointer;
+  list-style: none;
+}
+
+details.fam > summary::-webkit-details-marker { display: none; }
+details.fam > summary::before {
+  content: '▸';
+  color: var(--mute);
+  font-size: 11px;
+}
+details.fam[open] > summary::before { content: '▾'; }
+details.fam > summary span { flex: 1; font-weight: 600; }
+details.fam > summary small { color: var(--mute); font-weight: 400; }
+details.fam[open] > summary { margin-bottom: 8px; }
+details.fam .card { margin-bottom: 8px; }
+details.fam .card:last-child { margin-bottom: 0; }
+
+/* cuore: solo per le serie che il sito marca come preferite */
 .heart {
   justify-self: end;
   align-self: start;
-  padding: 0 6px;
-  border: 0;
-  background: none;
+  color: #e0245e;
   font-size: 17px;
   line-height: 1;
-  color: var(--line);
 }
-.heart.on { color: #e0245e; }
-.card.unliked { opacity: .55; }
 
 .peek {
   margin: 6px 0 12px;
