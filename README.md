@@ -67,6 +67,20 @@ store vedi [docs/PUBLISHING.md](docs/PUBLISHING.md).
    del servizio feed e la **cartella dei download**: la scegli una volta con il selettore di sistema e
    da lì i file vengono scritti direttamente, senza il dialogo "salva con nome" a ogni episodio.
 
+### Accesso alla configurazione
+
+Pagina e rotte di amministrazione (`/`, `/config`, `/status`) chiedono una password. La prima volta è
+`123456`, scritta sotto il form di accesso; al primo ingresso il servizio **obbliga** a cambiarla
+(almeno 8 caratteri, non solo cifre) e finché non lo fai `/config` risponde 403.
+
+Le password stanno come PBKDF2-HMAC-SHA256 con salt casuale, le sessioni in memoria (12 ore) e dopo
+5 tentativi sbagliati l'accesso si blocca per 30 secondi. Riavviare il servizio butta fuori le
+sessioni, non la password.
+
+Restano senza password le rotte che usa l'estensione: `POST /feed`, `POST /download`, `GET /jobs`,
+`GET /feed.xml`, `GET /health`. Con il bind predefinito (127.0.0.1) sono raggiungibili solo da quella
+macchina; se sposti l'ascolto su 0.0.0.0 mettile dietro VPN o firewall.
+
 ### Cartella dei download
 
 I download li fa il servizio, non il browser. La cartella si imposta una volta nella pagina di

@@ -11,6 +11,8 @@ pub struct Config {
     pub check_min: u32,
     pub version_check: bool,
     pub download_dir: String,
+    /// hash PBKDF2; vuoto = password iniziale mai cambiata
+    pub password: String,
 }
 
 impl Default for Config {
@@ -21,6 +23,7 @@ impl Default for Config {
             check_min: 30,
             version_check: true,
             download_dir: crate::home_dir().join("Downloads").join("AniSatDownloader").display().to_string(),
+            password: String::new(),
         }
     }
 }
@@ -155,6 +158,19 @@ impl Config {
     }
 
     pub fn to_json(&self) -> String {
+        format!(
+            "{{\"name\":\"{}\",\"bind\":\"{}\",\"check_min\":{},\"version_check\":{},\"download_dir\":\"{}\",\"password\":\"{}\"}}",
+            escape(&self.name),
+            escape(&self.bind),
+            self.check_min,
+            self.version_check,
+            escape(&self.download_dir),
+            escape(&self.password)
+        )
+    }
+
+    /// Quello che esce dalla API: senza l'hash della password.
+    pub fn to_json_public(&self) -> String {
         format!(
             "{{\"name\":\"{}\",\"bind\":\"{}\",\"check_min\":{},\"version_check\":{},\"download_dir\":\"{}\"}}",
             escape(&self.name),

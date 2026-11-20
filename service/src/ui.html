@@ -54,7 +54,35 @@
 
     <div id="notice"></div>
 
-    <section>
+    <section id="loginBox" hidden>
+      <h2>Accesso</h2>
+      <form id="loginForm">
+        <label>Password <input id="loginPassword" type="password" autocomplete="current-password" /></label>
+        <p class="hint" id="loginHint" hidden>Primo accesso: la password è <code>123456</code>. Ti verrà chiesto di cambiarla subito.</p>
+        <div class="row" style="margin-top: 14px">
+          <button type="submit">Entra</button>
+          <span id="loginResult" class="hint"></span>
+        </div>
+      </form>
+    </section>
+
+    <section id="passwordBox" hidden>
+      <h2>Cambio password obbligatorio</h2>
+      <p class="hint">Prima di usare la configurazione devi sostituire la password iniziale.</p>
+      <form id="passwordForm">
+        <label>Password attuale <input id="pwCurrent" type="password" autocomplete="current-password" value="123456" /></label>
+        <label>Nuova password <input id="pwNew" type="password" autocomplete="new-password" /></label>
+        <label>Ripeti la nuova password <input id="pwRepeat" type="password" autocomplete="new-password" /></label>
+        <p class="hint">Almeno 8 caratteri, non solo cifre.</p>
+        <div class="row" style="margin-top: 14px">
+          <button type="submit">Cambia password</button>
+          <span id="pwResult" class="hint"></span>
+        </div>
+      </form>
+    </section>
+
+
+    <section id="configBox">
       <h2>Configurazione</h2>
       <form id="cfg">
         <label>Nome del feed <input id="name" type="text" maxlength="120" /></label>
@@ -73,7 +101,7 @@
       </p>
     </section>
 
-    <section>
+    <section id="statusBox">
       <h2>Stato</h2>
       <dl>
         <dt>Feed</dt><dd id="s-path">—</dd>
@@ -159,11 +187,72 @@
 
       $('refresh').addEventListener('click', loadStatus);
 
-      loadConfig().then(loadStatus).catch((e) => {
+      function show(box, ...sections) {
+        for (const id of ['loginBox', 'passwordBox', 'configBox', 'statusBox']) {
+          $(id).hidden = !sections.includes(id) && id !== box;
+        }
+        if (box) $(box).hidden = false;
+      }
+
+      async function boot() {
+        const r = await fetch('auth', { cache: 'no-store' });
+        const a = await r.json();
+        if (!a.authenticated) {
+          show('loginBox');
+          $('loginHint').hidden = !a.default_password;
+          $('loginPassword').focus();
+          return;
+        }
+        if (a.must_change) {
+          show('passwordBox');
+          $('pwNew').focus();
+          return;
+        }
+        show(null, 'configBox', 'statusBox');
+        await loadConfig();
+        await loadStatus();
+      }
+
+      $('loginForm').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        $('loginResult').textContent = 'verifico…';
+        const body = JSON.stringify({ password: $('loginPassword').value });
+        const r = await fetch('login', { method: 'POST', headers: { 'content-type': 'text/plain' }, body });
+        const res = await r.json();
+        $('loginPassword').value = '';
+        if (!r.ok) {
+          $('loginResult').textContent = res.error || 'accesso negato';
+          return;
+        }
+        $('loginResult').textContent = '';
+        await boot();
+      });
+
+      $('passwordForm').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        if ($('pwNew').value !== $('pwRepeat').value) {
+          $('pwResult').textContent = 'le due password non coincidono';
+          return;
+        }
+        $('pwResult').textContent = 'salvo…';
+        const body = JSON.stringify({ current: $('pwCurrent').value, new: $('pwNew').value });
+        const r = await fetch('password', { method: 'POST', headers: { 'content-type': 'text/plain' }, body });
+        const res = await r.json();
+        if (!r.ok) {
+          $('pwResult').textContent = res.error || 'cambio rifiutato';
+          return;
+        }
+        $('pwResult').textContent = '';
+        await boot();
+      });
+
+      boot().catch((e) => {
         $('notice').className = 'show';
         $('notice').textContent = 'Errore: ' + e.message;
       });
-      setInterval(loadStatus, 30000);
+      setInterval(() => {
+        if (!$('statusBox').hidden) loadStatus().catch(() => {});
+      }, 30000);
     </script>
   </body>
 </html>

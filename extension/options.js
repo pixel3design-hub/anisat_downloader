@@ -39,11 +39,11 @@ $('checkServer').addEventListener('click', async () => {
   el.textContent = 'verifico…';
   const base = ($('feedServer').value.trim() || `http://127.0.0.1:${FEED_PORT}`).replace(/\/+$/, '');
   try {
-    const r = await fetch(`${base}/status`, { cache: 'no-store', signal: AbortSignal.timeout(2500) });
+    // /status richiede la password: qui basta sapere che il servizio risponde
+    const r = await fetch(`${base}/health`, { cache: 'no-store', signal: AbortSignal.timeout(2500) });
     if (!r.ok) throw new Error(String(r.status));
-    const s = await r.json();
     el.className = 'status ok';
-    el.textContent = `attivo · ${s.items} item · ${(s.bytes / 1024).toFixed(1)} KB · ${s.path}`;
+    el.textContent = `attivo · configurazione su ${base}/`;
   } catch {
     el.className = 'status bad';
     el.textContent = 'non raggiungibile: avvia anisat-feed';

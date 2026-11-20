@@ -1,6 +1,6 @@
 [package]
 name = "anisat-feed"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 description = "Server locale del feed RSS generato dall'estensione AniSat Downloader"
 license = "GPL-2.0-only"
@@ -11,6 +11,7 @@ keywords = ["rss", "feed", "anime", "localhost", "downloader"]
 categories = ["command-line-utilities", "web-programming::http-server"]
 
 [dependencies]
+sha2 = "0.10"
 tiny_http = "0.12"
 ureq = "3"
 
