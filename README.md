@@ -106,6 +106,10 @@ Linux `x86_64`/`aarch64` come `.tar.gz`, `.deb` e `.rpm`, Windows come `.zip`. m
 disponibilità dei runner GitHub e viene caricato a parte. AppImage e Flatpak si generano a mano dal
 workflow *packaging extra*.
 
+Su Fedora, installazione, aggiornamenti e repository locale sono descritti in
+[docs/FEDORA.md](docs/FEDORA.md) (`packaging/setup-local-repo.sh` crea il repo per `dnf search` e
+`dnf upgrade`).
+
 I pacchetti `.deb` e `.rpm` installano anche `.desktop`, metainfo AppStream e l'icona in
 `hicolor/256x256`, quindi dopo l'installazione `anisat-feed` compare con la sua icona nel menu
 applicazioni e nella pagina "Installati" del software center.
