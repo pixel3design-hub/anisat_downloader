@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AniSat Downloader",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Serie, episodi scaricabili, preferiti e feed RSS per animesaturn.net",
   "author": {
     "email": "social@pixel3design.it"

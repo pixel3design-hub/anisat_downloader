@@ -1,4 +1,5 @@
 import { api as webext } from './lib/api.js';
+import { getDir, requestPermission } from './lib/folder.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -142,6 +143,16 @@ function renderSeries() {
   $('#emptyHint').hidden = list.length > 0;
   for (const slug of open) fillEps(slug);
 
+  const folder = st.folder;
+  const fEl = $('#folderState');
+  if (!folder) {
+    fEl.innerHTML = 'Cartella download: quella predefinita del browser · <button data-act="options">scegline una</button> per non scegliere il percorso a ogni file';
+  } else if (folder.permission === 'granted') {
+    fEl.textContent = `Cartella download: ${folder.name}`;
+  } else {
+    fEl.innerHTML = `Cartella download: ${esc(folder.name)}, permesso da rinnovare <button data-act="reauthorize">Riautorizza</button>`;
+  }
+
   const f = st.feedState || {};
   const el = $('#feedState');
   if (!f.at) el.textContent = 'Feed: mai inviato al server';
@@ -181,7 +192,8 @@ function fillEps(slug) {
 function renderQueue() {
   const items = st.queue.map((q, i) => {
     const title = st.series[q.slug]?.title || q.slug;
-    const state = q.state === 'done' ? '✓' : q.state === 'downloading' ? '…' : q.state === 'error' ? '⚠' : '·';
+    const pct = q.state === 'downloading' && q.progress != null ? ` ${q.progress}%` : '';
+    const state = q.state === 'done' ? '✓' : q.state === 'downloading' ? `…${pct}` : q.state === 'error' ? '⚠' : '·';
     const retry = q.state === 'error'
       ? `<button data-act="retry" data-id="${q.downloadId ?? i}" data-slug="${esc(q.slug)}" data-n="${q.n}">Riprova</button>`
       : '';
@@ -381,6 +393,13 @@ document.addEventListener('click', async (ev) => {
           if (e.serverDown) return askServer(e.message);
           throw e;
         }
+      case 'reauthorize': {
+        const handle = await getDir();
+        if (!handle) return toast('Nessuna cartella scelta: aprila dalle impostazioni');
+        const perm = await requestPermission(handle);
+        await load();
+        return toast(perm === 'granted' ? 'Permesso rinnovato' : 'Permesso negato: resto sulla cartella del browser');
+      }
       case 'options':
         return webext.runtime.openOptionsPage();
       case 'expand':

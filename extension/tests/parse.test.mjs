@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as site from '../sites/animesaturn.js';
 import { buildFeed, medianInterval } from '../lib/feed.js';
+import { splitPath } from '../lib/folder.js';
 
 const read = (f) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8');
 
@@ -50,7 +51,8 @@ test('episodio: URL mp4 diretto dopo la decodifica XOR del manifest', async () =
   assert.match(r.url, /^https:\/\/srv\d+\.\w+\.streampeaker\.org\/DDL\/ANIME\//);
   assert.match(r.url, /Ep_01_SUB_ITA\.mp4\?token=/);
   assert.equal(r.hls, null);
-  assert.ok(r.expiresAt > Date.now());
+  // il fixture contiene expires=1795139252: verifica deterministica, non legata all'orologio
+  assert.equal(r.expiresAt, 1795139252 * 1000);
 });
 
 test('titoli: stagione e lingua', () => {
@@ -116,4 +118,13 @@ test('feed: tutte le puntate + riga "in arrivo" disabilitata, tutto ASCII', () =
   // la puntata stimata (futura) sta in cima
   const titles = [...xml.matchAll(/<title>([^<]+)<\/title>/g)].map((m) => m[1]);
   assert.equal(titles[1], 'Reincarnated as a Sword 2 &#8212; Ep 9 (in arrivo)');
+});
+
+test('percorso cartella: sottocartelle e nome file', () => {
+  assert.deepEqual(splitPath('AnimeSaturn/Serie X/Serie X - Ep 01.mp4'), {
+    dirs: ['AnimeSaturn', 'Serie X'],
+    name: 'Serie X - Ep 01.mp4',
+  });
+  assert.deepEqual(splitPath('solo-file.mp4'), { dirs: [], name: 'solo-file.mp4' });
+  assert.deepEqual(splitPath('///'), { dirs: [], name: 'download.mp4' });
 });

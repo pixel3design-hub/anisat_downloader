@@ -5,6 +5,7 @@
 
 import { api as webext } from './lib/api.js';
 import * as site from './sites/animesaturn.js';
+import { getDir, permission, writeStream } from './lib/folder.js';
 import { buildFeed } from './lib/feed.js';
 
 const DEFAULTS = {
@@ -238,7 +239,14 @@ async function pump() {
   const st = await store();
   // giro precedente interrotto prima di avere un downloadId: torna in coda
   for (const q of st.queue) if (q.state === 'downloading' && !q.downloadId) q.state = 'queued';
+
+  // cartella scelta una volta sola: se il permesso regge, si scrive lì senza dialogo
+  const dir = await getDir();
+  const folderOk = Boolean(dir) && (await permission(dir)) === 'granted';
+
   let active = st.queue.filter((q) => q.state === 'downloading').length;
+  const running = [];
+
   for (const q of st.queue) {
     if (active >= st.settings.concurrency) break;
     if (q.state !== 'queued') continue;
@@ -250,18 +258,45 @@ async function pump() {
       if (!r.url) throw new Error('sorgente HLS non supportata');
       q.url = r.url;
       q.expiresAt = r.expiresAt;
-      q.downloadId = await webext.downloads.download({
-        url: r.url,
-        filename: fileName(st.series[q.slug], q.n, st.settings.downloadFolder),
-        conflictAction: 'uniquify',
-        saveAs: false,
-      });
+      const rel = fileName(st.series[q.slug], q.n, st.settings.downloadFolder);
+
+      if (folderOk) {
+        // scrittura diretta: nessun "salva con nome", e in parallelo senza bloccare la coda
+        q.progress = 0;
+        running.push(writeOne(dir, q, rel, st));
+      } else {
+        q.downloadId = await webext.downloads.download({
+          url: r.url,
+          filename: rel,
+          conflictAction: 'uniquify',
+          saveAs: false,
+        });
+      }
     } catch (e) {
       q.state = 'error';
       q.error = String(e?.message || e);
     }
     await put({ queue: st.queue });
   }
+
+  await Promise.allSettled(running);
+}
+
+async function writeOne(dir, q, rel, st) {
+  try {
+    const { bytes } = await writeStream(dir, rel, q.url, (done, total) => {
+      q.progress = total ? Math.min(99, Math.round((done / total) * 100)) : (q.progress || 0);
+      put({ queue: st.queue });
+    });
+    q.state = 'done';
+    q.bytes = bytes;
+    q.path = rel;
+    q.progress = 100;
+  } catch (e) {
+    q.state = 'error';
+    q.error = String(e?.message || e);
+  }
+  await put({ queue: st.queue });
 }
 
 webext.downloads.onChanged.addListener(async (delta) => {
@@ -310,7 +345,11 @@ async function exportList(slug, ns) {
 // --- messaggi -----------------------------------------------------------
 
 const handlers = {
-  state: async () => store(),
+  state: async () => {
+    const st = await store();
+    const dir = await getDir();
+    return { ...st, folder: dir ? { name: dir.name, permission: await permission(dir) } : null };
+  },
   search: ({ q }) => site.search(q),
   seasons: ({ url }) => site.seasons(url),
   add: ({ slugs, url }) => addSeries(slugs || url),

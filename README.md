@@ -19,8 +19,9 @@ uscito, aprire il player e salvare i file a mano.
 L'estensione fa quel lavoro:
 
 - tiene l'elenco delle serie che segui, con le puntate uscite e quelle previste;
-- scarica gli episodi che scegli in `Download/<cartella>/<serie>/`, usando la coda del browser, e sa
-  anche produrre un file di testo con gli URL diretti per chi preferisce aria2 o JDownloader;
+- scarica gli episodi che scegli nella cartella che indichi una volta sola (o in `Download/` se non ne
+  scegli una), e sa anche produrre un file di testo con gli URL diretti per chi preferisce aria2 o
+  JDownloader;
 - scrive un feed RSS con le uscite e la stima della prossima puntata, così un lettore RSS ti avvisa
   senza tenere il browser aperto.
 
@@ -62,8 +63,19 @@ store vedi [docs/PUBLISHING.md](docs/PUBLISHING.md).
    temporaneo* → `dist/firefox/manifest.json`.
 2. Apri il popup e usa **Cerca**: scrivi il nome della serie, premi `+`, e se il sito ha più stagioni
    scegli quale aggiungere o prendile tutte.
-3. Dalle opzioni (⚙ nel popup) imposti download in parallelo, intervallo di aggiornamento, cartella
-   dei download e indirizzo del servizio feed.
+3. Dalle opzioni (⚙ nel popup) imposti download in parallelo, intervallo di aggiornamento, indirizzo
+   del servizio feed e la **cartella dei download**: la scegli una volta con il selettore di sistema e
+   da lì i file vengono scritti direttamente, senza il dialogo "salva con nome" a ogni episodio.
+
+### Cartella dei download
+
+La prima volta apri le opzioni e premi *Scegli cartella…*: da quel momento gli episodi finiscono lì
+dentro `AniSatDownloader/<serie>/`, scritti in streaming mentre scaricano, senza chiedere più nulla.
+
+Se non scegli una cartella l'estensione usa quella predefinita del browser. Con l'opzione di Brave
+"chiedi dove salvare ogni file" attiva, il percorso viene domandato per ogni episodio: o scegli la
+cartella dall'estensione, o disattivi quell'opzione. Dopo un riavvio il browser può richiedere di
+nuovo il permesso sulla cartella, e in quel caso il popup mostra "Riautorizza".
 
 ### Servizio feed
 
