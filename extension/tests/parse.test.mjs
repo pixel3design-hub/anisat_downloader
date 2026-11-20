@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import * as site from '../sites/animesaturn.js';
 import { buildFeed, medianInterval } from '../lib/feed.js';
 import { buildView, missingSeasons, statusKey, statusSections } from '../lib/group.js';
+import { aria2List, ytdlpList } from '../lib/listfile.js';
 
 const read = (f) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8');
 
@@ -225,6 +226,43 @@ test('login: token CSRF dal form e credenziali rifiutate', async () => {
   } finally {
     globalThis.fetch = stub;
   }
+});
+
+test('liste: la risoluzione reale dell\'episodio finisce nel file', async () => {
+  // fixture vere: pagina episodio + manifest del player -> URL diretto -> lista
+  const r = await site.resolveStream(site.episodeUrl('reincarnated-as-a-sword-season-2-j9hRW', 1));
+  const entry = { n: 1, url: r.url, hls: r.hls, out: 'AnimeSaturn/Serie/Serie - Ep 01.mp4' };
+
+  const aria = aria2List({ title: 'Serie', episodes: [entry] });
+  assert.match(aria, /srv\d+\.\w+\.streampeaker\.org\/DDL\/ANIME\/.*Ep_01_SUB_ITA\.mp4\?token=/);
+  assert.match(aria, / {2}out=AnimeSaturn\/Serie\/Serie - Ep 01\.mp4/);
+
+  const ytdl = ytdlpList({ title: 'Serie', episodes: [entry] });
+  assert.equal((ytdl.match(/^https:/gm) || []).length, 1);
+});
+
+test('liste per aria2 e yt-dlp: URL, out= e fonti HLS', () => {
+  const episodes = [
+    { n: 1, url: 'https://srv1.x/Ep_01.mp4?token=a', out: 'AnimeSaturn/X/X - Ep 01.mp4' },
+    { n: 2, url: null, hls: 'https://srv1.x/Ep_02.m3u8?token=b' },
+    { n: 3, url: null, hls: null, error: 'HTTP 403' },
+  ];
+
+  const aria = aria2List({ title: 'X', file: 'X-aria2.txt', episodes });
+  assert.match(aria, /aria2c -c -i X-aria2\.txt/);
+  assert.match(aria, /Ep_01\.mp4\?token=a\n {2}out=AnimeSaturn\/X\/X - Ep 01\.mp4/);
+  // aria2 non scarica HLS: la riga 2 non deve contenere un URL
+  assert.match(aria, /# ep 2: solo HLS \(aria2 non lo scarica\), usa la lista yt-dlp/);
+  assert.match(aria, /# ep 3: nessuna fonte utilizzabile \(HTTP 403\)/);
+  assert.equal((aria.match(/^https:/gm) || []).length, 1);
+
+  const ytdl = ytdlpList({ title: 'X', file: 'X-ytdlp.txt', episodes });
+  assert.match(ytdl, /yt-dlp --batch-file X-ytdlp\.txt/);
+  assert.match(ytdl, /# ep 2\nhttps:\/\/srv1\.x\/Ep_02\.m3u8\?token=b/);
+  assert.match(ytdl, /# ep 3: nessuna fonte utilizzabile/);
+  assert.equal((ytdl.match(/^https:/gm) || []).length, 2);
+  // il file yt-dlp resta caricabile: solo ASCII
+  assert.ok([aria, ytdl].every((t) => t.split('\n').every((l) => !/[^\x00-\x7f]/.test(l))));
 });
 
 test('markup: i modificatori di classe non azzerano watchlist e preferiti', () => {

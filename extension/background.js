@@ -6,6 +6,7 @@
 import { api as webext } from './lib/api.js';
 import * as site from './sites/animesaturn.js';
 import { buildFeed } from './lib/feed.js';
+import { FORMATS } from './lib/listfile.js';
 
 const DEFAULTS = {
   concurrency: 2,
@@ -552,30 +553,40 @@ webext.downloads.onChanged.addListener(async (delta) => {
 
 // --- lista file ---------------------------------------------------------
 
-async function exportList(slug, ns) {
+// File con gli URL della serie, per aria2 o yt-dlp (gli URL scadono: si rigenera al volo).
+async function exportList({ slug, ns, format = 'aria2' } = {}) {
   const st = await store();
   const series = st.series[slug];
+  const folder = st.settings.downloadFolder || DEFAULTS.downloadFolder;
+  const title = safeName(series?.title || slug);
+  const make = FORMATS[format];
+  if (!make) throw new Error(`formato non supportato: ${format}`);
+
   const eps = (st.episodes[slug] || []).filter((e) => !ns?.length || ns.includes(e.n)).sort((a, b) => a.n - b.n);
-  const lines = [];
+  const resolved = [];
   for (const ep of eps) {
+    const row = { n: ep.n, url: null, hls: null, out: fileName(series, ep.n, folder) };
     try {
-      const r = await site.resolveStream(ep.url);
-      if (!r.url) continue;
-      lines.push(`${r.url}\n  out=${fileName(series, ep.n, st.settings.downloadFolder)}`);
-    } catch {
-      lines.push(`# ep ${ep.n}: URL non risolvibile (${ep.url})`);
+      Object.assign(row, await site.resolveStream(ep.url));
+    } catch (e) {
+      row.error = String(e?.message || e);
     }
+    resolved.push(row);
   }
-  if (!lines.length) throw new Error('nessun URL risolto');
-  const text = lines.join('\n') + '\n';
-  const name = `${st.settings.downloadFolder || DEFAULTS.downloadFolder}/${safeName(series?.title || slug)}-list.txt`;
+
+  const usable = resolved.filter((r) => (format === 'ytdlp' ? r.url || r.hls : r.url));
+  if (!usable.length) throw new Error('nessun URL risolto');
+
+  const file = `${title}-${format}.txt`;
+  const text = make({ title, file, folder, episodes: resolved });
   await webext.downloads.download({
-    url: `data:text/plain;base64,${btoa(text)}`,
-    filename: name,
+    // encodeURIComponent e non base64: i titoli possono avere caratteri non latin1
+    url: `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`,
+    filename: `${folder}/${file}`,
     conflictAction: 'uniquify',
     saveAs: false,
   });
-  return { count: lines.length, name };
+  return { count: usable.length, total: resolved.length, name: `${folder}/${file}`, format };
 }
 
 // --- messaggi -----------------------------------------------------------
@@ -645,7 +656,7 @@ const handlers = {
     await put({ seen: st.seen, news: st.news });
     await updateBadge();
   },
-  exportList: ({ slug, ns }) => exportList(slug, ns),
+  exportList: (msg = {}) => exportList(msg),
   pushFeed: ({ force } = {}) => pushFeed({ force }),
   saveFeed: () => saveFeedFile(),
   settings: async ({ patch }) => {

@@ -457,6 +457,17 @@ function openProfileModal(acc) {
   );
 }
 
+async function saveList(slug, format) {
+  closeModal();
+  toast('Risolvo gli URL…');
+  try {
+    const res = await api('exportList', { slug, format });
+    toast(`Lista ${format}: ${res.count}/${res.total} episodi in ${res.name}`);
+  } catch (e) {
+    toast(`Errore: ${e.message}`);
+  }
+}
+
 async function commitProfile(slugs) {
   toast(`Aggiungo ${slugs.length > 1 ? `${slugs.length} serie` : 'la serie'}…`);
   try {
@@ -624,9 +635,19 @@ document.addEventListener('click', async (ev) => {
         await load();
         return;
       case 'list': {
-        toast('Risolvo gli URL…');
-        const res = await api('exportList', { slug });
-        return toast(`Lista pronta: ${res.count} episodi`);
+        const title = st.series[slug]?.title || slug;
+        openModal(
+          'Salva la lista URL',
+          `<p>${esc(title)}</p>
+           <p class="hint">Il file contiene gli URL diretti risolti adesso: scadono dopo qualche ora,
+           quindi rigeneralo se il download non parte.</p>`,
+          [
+            { label: 'aria2 (.txt)', onClick: () => saveList(slug, 'aria2') },
+            { label: 'yt-dlp (.txt)', secondary: true, onClick: () => saveList(slug, 'ytdlp') },
+            { label: 'Annulla', secondary: true, onClick: closeModal },
+          ],
+        );
+        return;
       }
       case 'remove':
         if (!confirm('Rimuovere la serie dai preferiti?')) return;
