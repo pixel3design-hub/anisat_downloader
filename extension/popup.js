@@ -644,6 +644,7 @@ document.addEventListener('click', async (ev) => {
           [
             { label: 'aria2 (.txt)', onClick: () => saveList(slug, 'aria2') },
             { label: 'yt-dlp (.txt)', secondary: true, onClick: () => saveList(slug, 'ytdlp') },
+            { label: 'Testo semplice (un URL per riga)', secondary: true, onClick: () => saveList(slug, 'plain') },
             { label: 'Annulla', secondary: true, onClick: closeModal },
           ],
         );

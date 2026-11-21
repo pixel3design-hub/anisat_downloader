@@ -41,4 +41,13 @@ export function ytdlpList({ title, file = 'lista.txt', folder = 'AnimeSaturn', e
   return lines.join('\n') + '\n';
 }
 
-export const FORMATS = { aria2: aria2List, ytdlp: ytdlpList };
+// [{ n, url }] -> un URL per riga, niente intestazioni: si incolla dove serve
+export function plainList({ episodes = [] } = {}) {
+  const lines = [];
+  for (const e of episodes) {
+    if (e.url) lines.push(e.url);
+  }
+  return lines.join('\n') + (lines.length ? '\n' : '');
+}
+
+export const FORMATS = { aria2: aria2List, ytdlp: ytdlpList, plain: plainList };

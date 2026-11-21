@@ -577,7 +577,7 @@ async function exportList({ slug, ns, format = 'aria2' } = {}) {
   const usable = resolved.filter((r) => (format === 'ytdlp' ? r.url || r.hls : r.url));
   if (!usable.length) throw new Error('nessun URL risolto');
 
-  const file = `${title}-${format}.txt`;
+  const file = format === 'plain' ? `${title}-url.txt` : `${title}-${format}.txt`;
   const text = make({ title, file, folder, episodes: resolved });
   await webext.downloads.download({
     // encodeURIComponent e non base64: i titoli possono avere caratteri non latin1

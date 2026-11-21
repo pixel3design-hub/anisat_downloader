@@ -20,8 +20,8 @@ L'estensione fa quel lavoro:
 
 - tiene l'elenco delle serie che segui, con le puntate uscite e quelle previste;
 - scarica gli episodi che scegli nella cartella che indichi una volta sola (o in `Download/` se non ne
-  scegli una), e sa anche produrre un file di testo con gli URL diretti per chi preferisce aria2 o
-  JDownloader;
+  scegli una), e sa anche produrre liste di URL in tre formati: per aria2, per yt-dlp e un semplice
+  testo con un link per riga;
 - scrive un feed RSS con le uscite e la stima della prossima puntata, così un lettore RSS ti avvisa
   senza tenere il browser aperto.
 

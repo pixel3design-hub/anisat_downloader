@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import * as site from '../sites/animesaturn.js';
 import { buildFeed, medianInterval } from '../lib/feed.js';
 import { buildView, missingSeasons, statusKey, statusSections } from '../lib/group.js';
-import { aria2List, ytdlpList } from '../lib/listfile.js';
+import { aria2List, plainList, ytdlpList } from '../lib/listfile.js';
 
 const read = (f) => readFileSync(new URL(`./fixtures/${f}`, import.meta.url), 'utf8');
 
@@ -29,10 +29,10 @@ test.before(() => {
     const u = String(url);
     if (u.includes('/playlist?')) return new Response(PLAYLIST, { status: 200 });
     if (u.includes('/related/')) return new Response(RELATED_HTML, { status: 200 });
-    // solo il profilo 286 esiste: qualunque altro id risponde 404 come il sito
+    // solo il profilo 4242 esiste: qualunque altro id risponde 404 come il sito
     const prof = /\/profile\/(\d+)(\/watchlist)?$/.exec(u);
     if (prof) {
-      if (prof[1] !== '286') return new Response('<html>non trovato</html>', { status: 404 });
+      if (prof[1] !== '4242') return new Response('<html>non trovato</html>', { status: 404 });
       return new Response(prof[2] ? WATCHLIST_HTML : PROFILE_HTML, { status: 200 });
     }
     if (u.includes('/calendar')) return new Response(CALENDAR_HTML, { status: 200 });
@@ -94,32 +94,28 @@ test('stagioni: correlati raggruppati per titolo e lingua', async () => {
 });
 
 test('profilo: id accettato come numero, URL o input sporco', () => {
-  assert.equal(site.profileId('286'), '286');
-  assert.equal(site.profileId(' https://www.animesaturn.net/profile/286 '), '286');
-  assert.equal(site.profileId('/profile/286/watchlist'), '286');
-  assert.equal(site.profileId('0286'), '286');
+  assert.equal(site.profileId('4242'), '4242');
+  assert.equal(site.profileId(' https://www.animesaturn.net/profile/4242 '), '4242');
+  assert.equal(site.profileId('/profile/4242/watchlist'), '4242');
+  assert.equal(site.profileId('04242'), '4242');
   assert.equal(site.profileId(''), null);
   assert.equal(site.profileId('non-un-profilo'), null);
   assert.equal(site.profileId(null), null);
 });
 
 test('profilo: nome, contatori, preferiti e watchlist', async () => {
-  const p = await site.profile('https://www.animesaturn.net/profile/286');
-  assert.equal(p.id, '286');
-  assert.equal(p.name, 'bazinga');
+  const p = await site.profile('https://www.animesaturn.net/profile/4242');
+  assert.equal(p.id, '4242');
+  assert.equal(p.name, 'utente-demo');
   assert.deepEqual(p.counts, { watching: 2, planned: 2, completed: 0, paused: 0, dropped: 0 });
-  assert.deepEqual(p.favorites.map((f) => f.slug), [
-    'da-wang-rao-ming-VnjTf',
-    'reincarnated-as-a-sword-season-2-j9hRW',
-    'the-apothecary-diaries-2-ita-YxWKM',
-  ]);
+  assert.deepEqual(p.favorites.map((f) => f.slug), ['serie-alfa-A1b2C', 'serie-beta-B2c3D', 'serie-gamma-C3d4E']);
   assert.equal(p.truncated, false);
   assert.equal(p.watchlist.length, 4);
   assert.deepEqual(p.watchlist[3], {
-    slug: 'the-apothecary-diaries-2-ita-YxWKM',
-    title: 'The Apothecary Diaries 2 (ITA)',
-    url: 'https://www.animesaturn.net/anime/the-apothecary-diaries-2-ita-YxWKM',
-    poster: 'https://img.saturncdn.net/static/images/locandine/VgMgs.jpg',
+    slug: 'serie-gamma-C3d4E',
+    title: 'Serie Gamma',
+    url: 'https://www.animesaturn.net/anime/serie-gamma-C3d4E',
+    poster: 'https://example.invalid/poster.png',
     type: 'TV',
     year: 2025,
     siteStatus: 'Finito',
@@ -221,8 +217,8 @@ test('login: token CSRF dal form e credenziali rifiutate', async () => {
     assert.equal(posted.get('login'), 'utente');
     assert.equal(posted.get('remember'), '1');
 
-    globalThis.fetch = answer('https://www.animesaturn.net/profile/286');
-    assert.deepEqual(await site.login('utente', 'giusta'), { ok: true, path: '/profile/286' });
+    globalThis.fetch = answer('https://www.animesaturn.net/profile/4242');
+    assert.deepEqual(await site.login('utente', 'giusta'), { ok: true, path: '/profile/4242' });
   } finally {
     globalThis.fetch = stub;
   }
@@ -265,11 +261,26 @@ test('liste per aria2 e yt-dlp: URL, out= e fonti HLS', () => {
   assert.ok([aria, ytdl].every((t) => t.split('\n').every((l) => !/[^\x00-\x7f]/.test(l))));
 });
 
+test('lista di testo semplice: un URL per riga, senza commenti', () => {
+  const episodes = [
+    { n: 1, url: 'https://srv1.x/Ep_01.mp4?token=a', out: 'AnimeSaturn/X/X - Ep 01.mp4' },
+    { n: 2, url: null, hls: 'https://srv1.x/Ep_02.m3u8?token=b' },
+    { n: 3, url: null, hls: null, error: 'HTTP 403' },
+  ];
+  const plain = plainList({ episodes });
+  assert.equal(plain, 'https://srv1.x/Ep_01.mp4?token=a\n');
+  assert.ok(!plain.includes('#'), 'niente righe di commento');
+  assert.ok(!plain.includes('out='), 'niente formato aria2');
+  assert.equal(plain.split('\n').filter(Boolean).length, 1);
+  // con nessun URL il file resta vuoto invece di contenere solo commenti
+  assert.equal(plainList({ episodes: [{ n: 3, error: 'HTTP 403' }] }), '');
+});
+
 test('markup: i modificatori di classe non azzerano watchlist e preferiti', () => {
   // il sito usa già varianti ("cal-day ", "cal-entry--pause"): il prefisso deve bastare
   const wl = site.parseWatchlist(WATCHLIST_HTML.replaceAll('<li class="wl-row">', '<li class="wl-row wl-row--compact">'));
   assert.equal(wl.rows.length, 4);
-  assert.equal(wl.rows[0].slug, 'tokyo-revengers-KMweA');
+  assert.equal(wl.rows[0].slug, 'serie-delta-D4e5F');
   assert.equal(wl.rows[3].watched, 15);
 
   const p = site.parseProfile(PROFILE_HTML.replaceAll('class="ac group"', 'class="ac group ac--wide"'));
@@ -283,7 +294,7 @@ test('profilo: contatori > 0 ma zero righe -> errore, non un profilo vuoto', asy
       ? new Response('<html><body><ul class="card"><li>niente</li></ul></body></html>', { status: 200 })
       : new Response(PROFILE_HTML, { status: 200 });
   try {
-    await assert.rejects(() => site.profile('286'), /watchlist non letta: il profilo dichiara 4 serie/);
+    await assert.rejects(() => site.profile('4242'), /watchlist non letta: il profilo dichiara 4 serie/);
   } finally {
     globalThis.fetch = stub;
   }

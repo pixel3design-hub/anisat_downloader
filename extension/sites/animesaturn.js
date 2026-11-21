@@ -254,7 +254,7 @@ export async function seasons(url) {
 
 // --- profilo pubblico (nessun login) -----------------------------------
 
-// "286", "https://www.animesaturn.net/profile/286", "/profile/286/watchlist" -> "286"
+// "1234", "https://www.animesaturn.net/profile/1234", "/profile/1234/watchlist" -> "1234"
 export function profileId(input) {
   const s = String(input ?? '').trim();
   const m = /(?:^|\/)profile\/(\d+)/.exec(s) || /^(\d+)$/.exec(s);

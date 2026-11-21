@@ -1,6 +1,6 @@
 [package]
 name = "anisat-feed"
-version = "0.10.0"
+version = "0.10.1"
 edition = "2021"
 description = "Server locale del feed RSS generato dall'estensione AniSat Downloader"
 license = "GPL-2.0-only"

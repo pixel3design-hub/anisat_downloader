@@ -86,7 +86,7 @@ $('checkProfile').addEventListener('click', async () => {
     const p = await api('accountCheck', { input });
     el.className = 'status ok';
     el.textContent = `${p.name || 'senza nome'} · id ${p.id} · watchlist ${p.watchlist.length} · preferiti ${p.favorites.length}${p.truncated ? ' · lista troncata' : ''}`;
-    // salva subito l'id normalizzato: ".../profile/286" e "286" sono lo stesso profilo
+    // salva subito l'id normalizzato: ".../profile/1234" e "1234" sono lo stesso profilo
     $('accountProfile').value = p.id;
   } catch (e) {
     el.className = 'status bad';
